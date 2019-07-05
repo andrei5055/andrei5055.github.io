@@ -1,1 +1,250 @@
-"Hello World" 
+<!DOCTYPE html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="user-scalable=no, width=device-width"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="stylesheet"
+              type="text/css"
+              href="sgraph.css" />
+
+        <title>Technical Analysis Price Correlation</title>
+        <script src="sgraph.js"></script>
+        <script src="sgraphgui.js"></script>
+        <script src="sgraphmain.js"></script>
+    </head>
+    <noscript>
+        <style type="text/css">
+            #main_div {
+                display: none;
+            }
+        </style>
+        <h1>JavaScript is disabled.<br>Please enable JavaScript in your web browser.</h1>
+    </noscript>
+
+    <body style="overflow-y:hidden" onload="sg_main.onLoadSetup()" onresize="sg_main.resizeGraph()">
+    <div class="topbuttons">
+        <input style="position:absolute; z-index:-1; opacity:0;pointer-events:none" type="file" accept=".csv" id="param_data_file" onchange="sg_main.handleFile(this.files)">
+        <button class="button button_top" onclick="document.querySelector('#param_data_file').click()">
+            <xml version="1.0" encoding="UTF-8" standalone="no"></xml>
+            <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" version="1.1" viewbox="0 0 100 100" style="position:fixed; top:25px; left: 15px;">
+                <rect style=" opacity:0.2" width="50" height="32" x="7" y="24" rx="2.5" ry="2.5"></rect>
+                <path style="fill:#4877b1" d="M 7,44.5 C 7,45.885 8.115,47 9.5,47 H 54.5 C 55.885,47 57,45.885 57,44.5 V 17.5 C 57,16.115 55.885,15 54.5,15 H 29 V 12.5 C 29,11.115 27.885,10 26.5,10 H 9.5 C 8.115,10 7,11.115 7,12.5"></path>
+                <rect style="opacity:0.2" width="50" height="32" x="7" y="22" rx="2.5" ry="2.5"></rect>
+                <rect style="fill:#e4e4e4" width="44" height="20" x="10" y="18" rx="2.5" ry="2.5"></rect>
+                <rect style="fill:#5294e2" width="50" height="32" x="7" y="23" rx="2.5" ry="2.5"></rect>
+                <path style="opacity:0.1;fill:#ffffff" d="M 9.5,10 C 8.115,10 7,11.115 7,12.5 V 13.5 C 7,12.115 8.115,11 9.5,11 H 26.5 C 27.885,11 29,12.115 29,13.5 V 12.5 C 29,11.115 27.885,10 26.5,10 Z M 29,15 V 16 H 54.5 C 55.89,16 57,17.115 57,18.5 V 17.5 C 57,16.115 55.89,15 54.5,15 Z"></path>
+                <path style="fill:none;stroke:#00ff00;stroke-width:3;stroke-linejoin:round" d="M 20,36.5 H 25 L 28,46.5 31,30.5 34,38.5 37,32.5 40,40.5 H 44"></path>
+            </svg>
+            <span id="sg_filename" style="position:relative; left: 20px;">Choose a file&hellip;</span>
+        </button>
+        <button class="button button_top" onclick="sg_main.onZoomOut()">Zoom Out</button>
+        <button class="button button_top" onclick="sg_main.onZoomIn()">Zoom In</button>
+        <div class="dropdown">
+            <button id="hide_show_params" onclick="sg_main.showHideShowMenu()" class="button button_top">Hide/Show parameters</button>
+            <div id="myDropdown" class="dropdown-content" style="z-index: 30">
+                <a href="#" name="sg_pd_menu">Show all</a>
+                <a href="#" name="sg_pd_menu">Checkboxes</a>
+                <a href="#" name="sg_pd_menu">Sliders</a>
+                <a href="#" name="sg_pd_menu">Historical Data</a>
+                <a href="#" name="sg_pd_menu">Archived Parameters</a>
+                <a href="#" name="sg_pd_menu">Order for 'Tomorrow'</a>
+                <a href="#" name="sg_pd_menu">Hide all</a>
+            </div>
+        </div>
+        <br>
+    </div>
+    <div id="sg_input_params1_div" class="sg_paramshead" style="z-index: 11">
+        <div id="sg_input_params1" class="sg_input_params">
+            Checkboxes
+        </div>
+        <div class="sg_paramstable">
+            <fieldset style="border-radius: 8px;">
+                <legend>Show:</legend>
+                <label class="checkbox_con">
+                    Open
+                    <input type="checkbox" id="param_cb21" checked value="m_bShowOpen" onclick="sg_main.showSGraph()">
+                    <span class="checkmark"></span>
+                </label>
+                <label class="checkbox_con">
+                    Candlestick
+                    <input type="checkbox" id="param_cb22" value="m_bShowCandleStick" onclick="sg_main.showSGraph()">
+                    <span class="checkmark"></span>
+                </label>
+                <label class="checkbox_con">
+                    Average
+                    <input type="checkbox" id="param_cb25" value="m_bShowAverage" onclick="sg_main.showSGraph()">
+                    <span class="checkmark"></span>
+                </label>
+                <label class="checkbox_con">
+                    Volume
+                    <input type="checkbox" id="param_cb26" value="m_bShowVolume" onclick="sg_main.showSGraph()">
+                    <span class="checkmark"></span>
+                </label>
+                <label class="checkbox_con">
+                    Order
+                    <input type="checkbox" id="param_cb27" value="m_bShowOrder" onclick="sg_main.showSGraph()">
+                    <span class="checkmark"></span>
+                </label>
+                <label class="checkbox_con">
+                    Profit
+                    <input type="checkbox" id="param_cb28" value="m_bShowProfit" onclick="sg_main.showSGraph()">
+                    <span class="checkmark"></span>
+                </label>
+                <label class="checkbox_con">
+                    Maximum Correlation  value
+                    <input type="checkbox" id="param_cb29" value="m_bShowCorr" onclick="sg_main.showSGraph()">
+                    <span class="checkmark"></span>
+                </label>
+                <label class="checkbox_con">
+                    Maximum Correlation position
+                    <input type="checkbox" id="param_cb30" value="m_bShowCorrPos" onclick="sg_main.showSGraph()">
+                    <span class="checkmark"></span>
+                </label>
+            </fieldset>
+            <fieldset style="border-radius: 8px;">
+                <legend>Options:</legend>
+                <label class="checkbox_con">
+                    Highlight correlation intervals
+                    <input type="checkbox" id="param_cb24" value="m_bHighlightCorrIntervals" onclick="sg_main.showSGraph()">
+                    <span class="checkmark"></span>
+                </label>
+                <label class="checkbox_con">
+                    Show perfomance
+                    <input type="checkbox" id="param_cb34" onclick="sg_main.showSGraph()">
+                    <span class="checkmark"></span>
+                </label>
+            </fieldset>
+            <fieldset style="border-radius: 8px;">
+                <legend>Order type:</legend>
+                <label class="checkbox_con">
+                    Calculated
+                    <input type="radio" name="order_type" id="param_cb33" checked value="m_bCalculatedOrder" onclick="sg_main.showNewSGraph()">
+                    <span class=" checkmark" style="border-radius: 50%"></span>
+                </label>
+                <label class="checkbox_con">
+                    Fixed
+                    <input type="radio" name="order_type" id="param_cb31" value="m_bFixedOrder" onclick="sg_main.showNewSGraph()">
+                    <span class=" checkmark" style="border-radius: 50%"></span>
+                </label>
+                <label class="checkbox_con">
+                    'Known' (next day 'High')
+                    <input type="radio" name="order_type" id="param_cb23" value="m_bKnownOrder" onclick="sg_main.showNewSGraph()">
+                    <span class=" checkmark" style="border-radius: 50%"></span>
+                </label>
+            </fieldset>
+        </div>
+    </div>
+    <div id="sg_input_params2_div" class="sg_paramshead" style="z-index: 12">
+        <div id="sg_input_params2" class="sg_input_params">
+            Sliders
+        </div>
+        <div class="sg_paramstable">
+            <fieldset style="border-radius: 8px;">
+                <legend>Optimization parameters:</legend>
+                <label id="sg_param_label1" for="param_sl1">Correlation length:</label>
+                <label id="param_sla1">50</label>
+                <br>
+                <input type="range" min="1" max="100" value="50" step="1" class="slider" id="param_sl1" onchange="sg_main.paramSliderChange(2, 1)" oninput="sg_main.paramSliderChange(2, 1)">
+                <br>
+                <br>
+                <label id="sg_param_label2" for="param_sl2">Order scale:</label>
+                <label id="param_sla2">0.01</label>
+                <br>
+                <input type="range" min="0" max="4" value="1" step="0.01" class="slider" id="param_sl2" onchange="sg_main.paramSliderChange(2, 2)" oninput="sg_main.paramSliderChange(2, 2)">
+                <br>
+                <br>
+                <label id="sg_param_label4" for="param_sl4">Maximum lost (% of Open):</label>
+                <label id="param_sla4">0.4</label>
+                <br>
+                <input type="range" min="0" max="2.5" value="0.4" step="0.1" class="slider" id="param_sl4" onchange="sg_main.paramSliderChange(2, 4)" oninput="sg_main.paramSliderChange(2, 4)">
+                <br>
+                <br>
+                <label id="sg_param_label3" for="param_sl3">Average length:</label>
+                <label id="param_sla3">40</label>
+                <br>
+                <input type="range" min="0" max="100" value="40" step="1" class="slider" id="param_sl3" onchange="sg_main.paramSliderChange(2, 3)" oninput="sg_main.paramSliderChange(2, 3)">
+                <br>
+                <br>
+                <button id="sg_optimize" class="button button_params" onclick="sg_main.onClickedOptimize()">Optimize</button>
+                <br>
+            </fieldset>
+            <fieldset style="border-radius: 8px;">
+                <legend>Calculation parameters:</legend>
+                <label id="sg_param_label5" for="param_sl5">Maximum days keep open:</label>
+                <label id="param_sla5">6</label>
+                <br>
+                <input type="range" min="0" max="100" value="6" step="1" class="slider" id="param_sl5" onchange="sg_main.paramSliderChange(2, 5)" oninput="sg_main.paramSliderChange(2, 5)">
+                <br>
+                <br>
+                <label id="sg_param_label6" for="param_sl6">Bid-ask spread($):</label>
+                <label id="param_sla6">0.01</label>
+                <br>
+                <input type="range" min="0" max="1" value="0.01" step="0.01" class="slider" id="param_sl6" onchange="sg_main.paramSliderChange(2, 6)" oninput="sg_main.paramSliderChange(2, 6)">
+                <br>
+            </fieldset>
+        </div>
+    </div>
+
+    <div id="sg_input_params3_div" class="sg_paramshead" style="z-index: 13">
+        <div id="sg_input_params3" class="sg_input_params">
+            Historical Data
+        </div>
+        <div class="sg_paramstable">
+            <div id="historical_data" class="scrollData"></div>
+        </div>
+    </div>
+    <div id="zoom_slider" class="sg_zoom_slider">
+        <div id="zoom_slider_div" class="sg_zoom_slider">
+        </div>
+        <div id="zoom_slider_start_date" class="sg_zoom_barslider_date" style="float: left">
+            Start
+        </div>
+        <div id="zoom_bar_start" class="sg_zoom_barslider_side">
+        </div>
+        <div id="zoom_bar" class="sg_zoom_barslider">
+            Profit
+        </div>
+        <div id="zoom_bar_stop" class="sg_zoom_barslider_side">
+        </div>
+        <div id="zoom_slider_stop_date" class="sg_zoom_barslider_date" style="position: fixed">
+            Stop
+        </div>
+    </div>
+    <div id="sg_input_params4_div" class="sg_paramshead" style="z-index: 14">
+        <div id="sg_input_params4" class="sg_input_params">
+            Archived Parameters
+        </div>
+        <div class=" sg_paramstable">
+            <div id="sg_latest" style="position: relative;" width="700px" ; height="40px">
+                <div id="sg_result" value="LatestResult" class="sg_latest_data_used">Latest Result</div>
+                <button class="button button_params" style="position: absolute; top: 3px; right: 30px" onclick="sg_main.copyResultToTable()">Copy to Table</button>
+            </div>
+            <br>
+            <fieldset style="border-radius: 8px;">
+                <legend>Archive Table (double-click on a row to select)</legend>
+                <textarea textarea name="resultname" id="sg_paste_table" value="LatestResult" class="textarea button_params"
+                            spellcheck="false" onclick="sg_main.clickArhiveTable()" oncopy="sg_main.copyArhiveTable()"
+                            onpaste="sg_main.pasteArhiveTable()" oninput="sg_main.rejectArhiveInput()">
+                    Copy/Paste Table
+                </textarea>
+                <br>
+                <div id="sg_params_tbl" class="scrollData" style="width: 950px;">
+                </div>
+            </fieldset>
+        </div>
+    </div>
+    <div id="sg_input_params5_div" class="sg_paramshead" style="z-index: 15">
+        <div id="sg_input_params5" class="sg_input_params">
+            Order for 'Tomorrow'
+        </div>
+        <div class=" sg_paramstable">
+            <div id="sg_order_tomorrow" class="output_sg_order">Result for tomorrow:</div>
+        </div>
+    </div>
+    <br>
+    <div id="sg_info"></div>
+    <div class="sg_canv" id="div_canvas" style="width: 100%">
+        <canvas id="sg_canvas" width="800" height="800"></canvas>
+    </div>
+    </body>
+</html>
