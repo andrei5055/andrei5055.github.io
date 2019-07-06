@@ -971,87 +971,80 @@ function sgraph()
 
         return dOrder;
     }
-    loadData = function(files)
+    histDataToTable = function (str) {
+        if (localStorage != undefined) {
+            localStorage.setItem("sg_hist_data", str);
+        }
+
+        let histTable = document.getElementById("historical_data");
+        let allRows = str.split(/\r?\n|\r/);
+        let table = "<table id='historical_data_table'>";
+        let indData = 0;
+        m_nData = 0;
+        for (let singleRow = 0; singleRow < allRows.length; singleRow++) {
+            if (singleRow === 0) {
+                table += '<thead>';
+                table += '<tr>';
+            }
+            else {
+                table += '<tr>';
+            }
+            let rowCells = allRows[singleRow].split(',');
+            if (rowCells.length >= 5) {
+                for (let rowCell = 0; rowCell < rowCells.length; rowCell++) {
+                    if (singleRow === 0) {
+                        table += '<th>';
+                        table += rowCells[rowCell];
+                        table += '</th>';
+                    }
+                    else {
+                        table += '<td>';
+                        table += rowCells[rowCell];
+                        table += '</td>';
+                    }
+                    if (singleRow != 0) {
+                        if (rowCell == 0) {
+                            m_DateTime[m_nData] = rowCells[rowCell];
+                            m_nData++;
+                        }
+                        else
+                            m_data[indData + rowCell - 1] = parseFloat(rowCells[rowCell]);
+                    }
+                }
+                if (singleRow != 0) {
+                    for (let fillRaw = rowCells.length - 1; fillRaw < NDATA; fillRaw++) {
+                        m_data[indData + fillRaw] = 0.0;
+                    }
+                    indData += NDATA;
+                }
+            }
+
+            if (singleRow === 0) {
+                table += '</tr>';
+                table += '</thead>';
+                table += '<tbody>';
+            }
+            else {
+                table += '</tr>';
+            }
+        }
+        table += '</tbody>';
+        table += '</table>';
+        histTable.innerHTML = table;
+    }
+
+    loadData = function(myFile)
     {
         dt3 = new Date();
-        let input = document.getElementById("param_data_file");
-        let histTable = document.getElementById("historical_data");
 
         m_Start = 0;
         m_Stop = 0;
-        if (files && files[0])
+        if (myFile)
         {
-            let myFile = files[0];
             let reader = new FileReader();
             reader.onloadend = function (e) { dataLoaded() };
-            let indData = 0;
             m_nData = 0;
-            reader.addEventListener('load', function (e)
-            {
-                let allRows = e.target.result.split(/\r?\n|\r/);
-                let table = "<table id='historical_data_table'>";
-                for (let singleRow = 0; singleRow < allRows.length; singleRow++)
-                {
-                    if (singleRow === 0)
-                    {
-                        table += '<thead>';
-                        table += '<tr>';
-                    }
-                    else
-                    {
-                        table += '<tr>';
-                    }
-                    let rowCells = allRows[singleRow].split(',');
-                    if (rowCells.length >= 5)
-                    {
-                        for (let rowCell = 0; rowCell < rowCells.length; rowCell++)
-                        {
-                            if (singleRow === 0)
-                            {
-                                table += '<th>';
-                                table += rowCells[rowCell];
-                                table += '</th>';
-                            }
-                            else
-                            {
-                                table += '<td>';
-                                table += rowCells[rowCell];
-                                table += '</td>';
-                            }
-                            if (singleRow != 0)
-                            {
-                                if (rowCell == 0) {
-                                    m_DateTime[m_nData] = rowCells[rowCell];
-                                    m_nData++;
-                                }
-                                else
-                                    m_data[indData + rowCell - 1] = parseFloat(rowCells[rowCell]);
-                            }
-                        }
-                        if (singleRow != 0)
-                        {
-                            for (let fillRaw = rowCells.length - 1; fillRaw < NDATA; fillRaw++) {
-                                m_data[indData + fillRaw] = 0.0;
-                            }
-                            indData += NDATA;
-                        }
-                    }
-
-                    if (singleRow === 0)
-                    {
-                        table += '</tr>';
-                        table += '</thead>';
-                        table += '<tbody>';
-                    }
-                    else
-                    {
-                        table += '</tr>';
-                    }
-                }
-                table += '</tbody>';
-                table += '</table>';
-                histTable.innerHTML = table;
-            });
+            reader.addEventListener('load', function (e) { histDataToTable(e.target.result); });
             reader.readAsText(myFile);
         }
     }
@@ -1361,6 +1354,7 @@ function sgraph()
         startOrStopOptimization: startOrStopOptimization,
         m_DateTime: m_DateTime,
         m_data: m_data,
-        m_ranges: m_ranges
+        m_ranges: m_ranges,
+        histDataToTable: histDataToTable
     };
 }
