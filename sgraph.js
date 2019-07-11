@@ -125,6 +125,8 @@ function sgraph()
     var m_optimum_ave = 0;
     var m_optimum_ncorr = 0;
     var m_profit = 0.0;
+    var m_maxCorr = 0.0;
+    var m_minCorr = 0.0;
     zoom = function(iZoom)
     {
         if (m_nData > 0) {
@@ -1313,6 +1315,11 @@ function sgraph()
                 break;
         }
     }
+    stopOptimization = function () {
+        if (m_optimize != 0) {
+            m_optimize = eStop2ndOptimizationLoop;
+        }
+    }
     startOrStopOptimization = function () {
         if (m_optimize == eNoOptimization) {
             m_optimize = eStart1stOptimizationLoop;
@@ -1351,6 +1358,7 @@ function sgraph()
         orderString: orderString,
         loadData: loadData,
         getPerfomance: getPerfomance,
+        stopOptimization: stopOptimization,
         startOrStopOptimization: startOrStopOptimization,
         m_DateTime: m_DateTime,
         m_data: m_data,

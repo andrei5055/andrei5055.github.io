@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="user-scalable=no, width=device-width"/>
@@ -6,7 +6,6 @@
         <link rel="stylesheet"
               type="text/css"
               href="sgraph.css" />
-
         <title>Technical Analysis Price Correlation</title>
         <script src="sgraph.js"></script>
         <script src="sgraphgui.js"></script>
@@ -22,11 +21,12 @@
     </noscript>
 
     <body style="overflow-y:hidden" onload="sg_main.onLoadSetup()" onresize="sg_main.resizeGraph()">
-    <div class="topbuttons">
+    <div id="sg_disable_all" onclick="sg_main.stopOptimize(event)"></div>
+    <div class="sg_topbuttons" id="sg_buttons">
         <input style="position:absolute; z-index:-1; opacity:0;pointer-events:none" type="file" accept=".csv" id="param_data_file" onchange="sg_main.handleFile(this.files)">
-        <button class="button button_top" onclick="document.querySelector('#param_data_file').click()">
+        <button class="button button_top" id=""sg_filename_button" onclick="document.querySelector('#param_data_file').click()">
             <xml version="1.0" encoding="UTF-8" standalone="no"></xml>
-            <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" version="1.1" viewbox="0 0 100 100" style="position:fixed; top:25px; left: 15px;">
+            <svg width="35" height="15" version="1.1" viewbox="12 12 40 40" style="position:relative; top:1px; left: 0px;">
                 <rect style=" opacity:0.2" width="50" height="32" x="7" y="24" rx="2.5" ry="2.5"></rect>
                 <path style="fill:#4877b1" d="M 7,44.5 C 7,45.885 8.115,47 9.5,47 H 54.5 C 55.885,47 57,45.885 57,44.5 V 17.5 C 57,16.115 55.885,15 54.5,15 H 29 V 12.5 C 29,11.115 27.885,10 26.5,10 H 9.5 C 8.115,10 7,11.115 7,12.5"></path>
                 <rect style="opacity:0.2" width="50" height="32" x="7" y="22" rx="2.5" ry="2.5"></rect>
@@ -35,12 +35,10 @@
                 <path style="opacity:0.1;fill:#ffffff" d="M 9.5,10 C 8.115,10 7,11.115 7,12.5 V 13.5 C 7,12.115 8.115,11 9.5,11 H 26.5 C 27.885,11 29,12.115 29,13.5 V 12.5 C 29,11.115 27.885,10 26.5,10 Z M 29,15 V 16 H 54.5 C 55.89,16 57,17.115 57,18.5 V 17.5 C 57,16.115 55.89,15 54.5,15 Z"></path>
                 <path style="fill:none;stroke:#00ff00;stroke-width:3;stroke-linejoin:round" d="M 20,36.5 H 25 L 28,46.5 31,30.5 34,38.5 37,32.5 40,40.5 H 44"></path>
             </svg>
-            <span id="sg_filename" style="position:relative; left: 20px;">Choose a file&hellip;</span>
+            <span id="sg_filename" style="position:relative; left: 2px;">Choose a file&hellip;</span>
         </button>
-        <button class="button button_top" onclick="sg_main.onZoomOut()">Zoom Out</button>
-        <button class="button button_top" onclick="sg_main.onZoomIn()">Zoom In</button>
         <div class="dropdown">
-            <button id="hide_show_params" onclick="sg_main.showHideShowMenu()" class="button button_top">Hide/Show parameters</button>
+            <button id="sg_hide_show_params" onclick="sg_main.showHideShowMenu()" class="button button_top">Hide/Show parameters</button>
             <div id="myDropdown" class="dropdown-content" style="z-index: 30">
                 <a href="#" name="sg_pd_menu">Show all</a>
                 <a href="#" name="sg_pd_menu">Checkboxes</a>
@@ -51,6 +49,8 @@
                 <a href="#" name="sg_pd_menu">Hide all</a>
             </div>
         </div>
+        <button class="button button_top" id="sg_zoom_in" onclick="sg_main.onZoomIn()">Zoom In</button>
+        <button class="button button_top" id="sg_zoom_out" onclick="sg_main.onZoomOut()">Zoom Out</button>
         <br>
     </div>
     <div id="sg_input_params1_div" class="sg_paramshead" style="z-index: 11">
@@ -206,7 +206,7 @@
         </div>
         <div id="zoom_bar_stop" class="sg_zoom_barslider_side">
         </div>
-        <div id="zoom_slider_stop_date" class="sg_zoom_barslider_date" style="position: fixed">
+        <div id="zoom_slider_stop_date" class="sg_zoom_barslider_date" style="float: right">
             Stop
         </div>
     </div>
@@ -222,7 +222,7 @@
             <br>
             <fieldset style="border-radius: 8px;">
                 <legend>Archive Table (double-click on a row to select)</legend>
-                <textarea textarea name="resultname" id="sg_paste_table" value="LatestResult" class="textarea button_params"
+                <textarea name="resultname" id="sg_paste_table" value="LatestResult" class="textarea button_params"
                             spellcheck="false" onclick="sg_main.clickArhiveTable()" oncopy="sg_main.copyArhiveTable()"
                             onpaste="sg_main.pasteArhiveTable()" oninput="sg_main.rejectArhiveInput()">
                     Copy/Paste Table

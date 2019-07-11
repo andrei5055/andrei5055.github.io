@@ -3,7 +3,19 @@ body {
     overflow: hidden;
 	padding-top: 10px;
 }
-
+#sg_disable_all
+{
+    display: none; 
+    z-index:1001;
+    position: absolute; 
+    top: 0%; 
+    left: 0%; 
+    width: 100%; 
+    height: 100%; 
+    background-color: white; 
+    opacity:.00; 
+    filter: alpha(opacity=00); 
+}
 .sg_svg_load_file {
 	fill: blue;
  }
@@ -56,7 +68,7 @@ body {
     border: none;
     border-radius: 8px;
     color: white;
-    padding: 8px 16px;
+    padding: 4px 8px;
     text-align: center;
     text-decoration: none;
     display: inline-block;
@@ -73,7 +85,7 @@ body {
     border: none;
     border-radius: 8px;
     color: white;
-    padding: 16px 32px;
+    padding: 8px 16px;
     text-align: center;
     text-decoration: none;
     display: inline-block;
@@ -354,4 +366,5 @@ html, body, div, a, i, button, select, option, optgroup, hr, br {
   user-select: none;
   cursor: default;
 }
+
  
