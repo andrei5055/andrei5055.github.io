@@ -23,7 +23,7 @@ You can select your own csv file with historical Open, High, Low, Close data: us
 
 
 
-SGraph calculates autocorrelation and potential profit (for one market share) by using autocorrelation, historical data and the following strategy: 
+SGraph calculates autocorrelation and potential profit (for one market share) by using autocorrelation, historical data and the following every day strategy: 
 
 1. If you do not have shares, then buy when market opens. 
 
