@@ -26,8 +26,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 function sgraph()
 {
-    /* following "enums" must be on top of all other attributes */
-    var ind = 0;
+    /* following "var" must be on top of all other attributes definitions*/
+    let ind = 0;
     var INDEX_OPEN = ind; ind++;
     var INDEX_HIGH = ind; ind++;
     var INDEX_LOW = ind; ind++;
@@ -64,11 +64,12 @@ function sgraph()
     var eRun2ndOptimizationLoop = ind; ind++;
     var eStop2ndOptimizationLoop = ind; ind++;
     var eEndOfOptimization = ind; ind++;
-    /* add new attributes after "enums" above */
 
     var HIGHLIGHT = 35;
     var MIN_LENGTH = 100;
     var N_C = 10;
+
+    /* add new attributes below this line */
     var dt1 = new Date();
     var dt2 = new Date();
     var dt3 = new Date();
@@ -80,8 +81,8 @@ function sgraph()
 
     var onOptimizeEnd = null;
     var onDrawEnd = null;
-    var m_image = null;
-    var m_imageData = null;
+    var m_colorMap = null;
+    var m_colorMapData = null;
     var m_imageCanvas = null;
     var m_imWidth = 0;
     var m_imHeight = 0;
@@ -92,7 +93,7 @@ function sgraph()
 
     var m_Start = 0;
     var m_Stop = 0;
-    var m_nData = null;
+    var m_nData = 0;
     var m_ranges = new Array(0);
     var m_optimumProfit = 0.0;
     var m_optimize = eNoOptimization;
@@ -119,7 +120,7 @@ function sgraph()
     var m_dMaxPr = 0.0;
 
     var m_optimizeTimeout = 0;
-    var m_optimum_PredScale = 0;
+    var m_optimum_OrderScale = 0;
     var m_optimum_MaxLost = 0;
     var m_optimum_ave = 0;
     var m_optimum_ncorr = 0;
@@ -157,10 +158,10 @@ function sgraph()
             }
         }
     }
-    drawCandlestick = function(ix1, iww, open, high, low, close)
+    drawCandlestick = function(ix1, iww, openp, high, low, closep)
     {
-        let closeOpenMax = Math.max(close, open);
-        let closeOpenMin = Math.min(close, open);
+        let closeOpenMax = Math.max(closep, openp);
+        let closeOpenMin = Math.min(closep, openp);
         let iy = Math.floor(high);
         let iy1 = Math.floor(closeOpenMax);
         let iww2 = Math.floor(iww / 2);
@@ -168,7 +169,7 @@ function sgraph()
         let urRect = 0;
         let ugRect = 255;
         let ubRect = 0;
-        if (close < open)
+        if (closep < openp)
         {
             urRect = 240;
             ugRect = 100;
@@ -295,8 +296,7 @@ function sgraph()
         let bOrder = false;
         let sellLimit = buyPrice;
         let prof = 0.0;
-        let nOrders = 0;
-        let close = 0.0;
+        let closep = 0.0;
         let todayProfit = 0.0;
         let nDaysOpenPos = 0;
         let nDaysToKeepOpen = sg_main.m_nDaysToKeepOpen;
@@ -306,11 +306,11 @@ function sgraph()
             iStart = 2;
         if (iStop < m_nData)
             iStop++;
-        for (let i = iStart, indData = iStart * NDATA_FP; i < iStop; i++, indData += NDATA_FP)
+        for (let i = iStart, indData = iStart * NDATA_FP, outData = iStart * NDATA; i < iStop; i++, indData += NDATA_FP, outData += NDATA)
         {
-            let open = m_dataFP[indData + INDEX_OPEN_FP];
+            let openp = m_dataFP[indData + INDEX_OPEN_FP];
             let highSpread = m_dataFP[indData + INDEX_HIGH_SPREAD_FP];
-            close = m_dataFP[indData + INDEX_CLOSE_FP];
+            closep = m_dataFP[indData + INDEX_CLOSE_FP];
             let dMaxLost = m_dataFP[indData + INDEX_MAX_LOST_FP];
             let delta = m_dataFP[indData + INDEX_DELTA_FP];
   
@@ -320,9 +320,8 @@ function sgraph()
             {
                 if (delta > spread)
                 {
-                    buyPrice = open + spread;
-                    sellLimit = open + delta;
-                    nOrders++;
+                    buyPrice = openp + spread;
+                    sellLimit = openp + delta;
                     bOrder = true;
                     nDaysOpenPos = 0;
                 }
@@ -340,7 +339,7 @@ function sgraph()
                     }
                     else
                     {
-                        if (sellLimit <= highSpread && open > close)
+                        if (sellLimit <= highSpread && openp > closep)
                         {
                             // Assume (if open > close) sell limit triggered before lost limit 
                         }
@@ -375,7 +374,7 @@ function sgraph()
                 }
             }
             s += todayProfit;
-            m_data[indData + INDEX_PROFIT] = s;
+            m_data[outData + INDEX_PROFIT] = s;
             if (dMin > delta)
                 dMin = delta;
             if (dMax < delta)
@@ -387,7 +386,7 @@ function sgraph()
         }
         if (iStop == m_nData && bOrder)
         {
-            todayProfit = close - spread - buyPrice;
+            todayProfit = closep - spread - buyPrice;
             s += todayProfit;
         }
         m_dMin = dMin;
@@ -453,6 +452,7 @@ function sgraph()
         if (ind == INDEX_OPEN)
             bShowCandlestick = sg_main.m_bShowCandleStick;
         let dataScale = 1.0;
+
         if (ind == INDEX_ORDER)
             dataScale = sg_main.m_OrderScale;
 
@@ -464,15 +464,15 @@ function sgraph()
             {
                 let j = i*NDATA;
                 ix1 = getInterpolatedValueInt(i, m_imWidth, m_Start, m_Stop);
-                let open  = m_data[j + INDEX_OPEN];
+                let openp  = m_data[j + INDEX_OPEN];
                 let high  = m_data[j + INDEX_HIGH];
                 let low   = m_data[j + INDEX_LOW];
-                let close = m_data[j + INDEX_CLOSE];
-                open = ((open - dMin) * dScale);
+                let closep = m_data[j + INDEX_CLOSE];
+                openp = ((openp - dMin) * dScale);
                 high = ((high - dMin) * dScale);
                 low = ((low - dMin) * dScale);
-                close = ((close - dMin) * dScale);
-                drawCandlestick(ix1, iww, open, high, low, close);
+                closep = ((closep - dMin) * dScale);
+                drawCandlestick(ix1, iww, openp, high, low, closep);
             }
             if (!sg_main.m_bShowOpen)
                 return;
@@ -572,7 +572,7 @@ function sgraph()
         }
         sg_main.m_ctx.globalAlpha = 1.0;
     }
-    scaleImage = function (image_data_src, width, height, w, h, dStart, dStop) {
+    scaleColormapToImage = function (colormapData, width, height, w, h, dStart, dStop) {
         let imageCanvas_data = m_imageCanvas.data;
         let imgBytesPerPixel = 4;
         let iwInp = w * imgBytesPerPixel;
@@ -600,15 +600,15 @@ function sgraph()
                 let cI1 = cIn + ii * imgBytesPerPixel;
                 let cI2 = cI1 + iwInp;
                 if (ii == w - 1) {
-                    imageCanvas_data[cOut] = (image_data_src[cI1] * (1.0 - yd) + image_data_src[cI2] * yd);
-                    imageCanvas_data[cOut + 1] = (image_data_src[cI1 + 1] * (1.0 - yd) + image_data_src[cI2 + 1] * yd);
-                    imageCanvas_data[cOut + 2] = (image_data_src[cI1 + 2] * (1.0 - yd) + image_data_src[cI2 + 2] * yd);
+                    imageCanvas_data[cOut] = (colormapData[cI1] * (1.0 - yd) + colormapData[cI2] * yd);
+                    imageCanvas_data[cOut + 1] = (colormapData[cI1 + 1] * (1.0 - yd) + colormapData[cI2 + 1] * yd);
+                    imageCanvas_data[cOut + 2] = (colormapData[cI1 + 2] * (1.0 - yd) + colormapData[cI2 + 2] * yd);
                     imageCanvas_data[cOut + 3] = 255;
                 }
                 else {
-                    imageCanvas_data[cOut] = ((image_data_src[cI1] * (1.0 - xd) + image_data_src[cI1 + imgBytesPerPixel] * xd) * (1 - yd) + (image_data_src[cI2] * (1.0 - xd) + image_data_src[cI2 + imgBytesPerPixel] * xd) * yd);
-                    imageCanvas_data[cOut + 1] = ((image_data_src[cI1 + 1] * (1.0 - xd) + image_data_src[cI1 + (imgBytesPerPixel + 1)] * xd) * (1 - yd) + (image_data_src[cI2 + 1] * (1.0 - xd) + image_data_src[cI2 + (imgBytesPerPixel + 1)] * xd) * yd);
-                    imageCanvas_data[cOut + 2] = ((image_data_src[cI1 + 2] * (1.0 - xd) + image_data_src[cI1 + (imgBytesPerPixel + 2)] * xd) * (1 - yd) + (image_data_src[cI2 + 2] * (1.0 - xd) + image_data_src[cI2 + (imgBytesPerPixel + 2)] * xd) * yd);
+                    imageCanvas_data[cOut] = ((colormapData[cI1] * (1.0 - xd) + colormapData[cI1 + imgBytesPerPixel] * xd) * (1 - yd) + (colormapData[cI2] * (1.0 - xd) + colormapData[cI2 + imgBytesPerPixel] * xd) * yd);
+                    imageCanvas_data[cOut + 1] = ((colormapData[cI1 + 1] * (1.0 - xd) + colormapData[cI1 + (imgBytesPerPixel + 1)] * xd) * (1 - yd) + (colormapData[cI2 + 1] * (1.0 - xd) + colormapData[cI2 + (imgBytesPerPixel + 1)] * xd) * yd);
+                    imageCanvas_data[cOut + 2] = ((colormapData[cI1 + 2] * (1.0 - xd) + colormapData[cI1 + (imgBytesPerPixel + 2)] * xd) * (1 - yd) + (colormapData[cI2 + 2] * (1.0 - xd) + colormapData[cI2 + (imgBytesPerPixel + 2)] * xd) * yd);
                     imageCanvas_data[cOut + 3] = 255;
                 }
                 cOut += imgBytesPerPixel;
@@ -641,13 +641,9 @@ function sgraph()
         let volumeMinMax = getVolumeMinMax();
         dMinA = stockMinMax.dMin;
         dMaxA = stockMinMax.dMax;
-        let d = dMinA - dMinA;
-        if (d <= 0.0)
-            d = 1.0;
-        d = (ih - 1) / d;
         setCorrelationMatrix();
         sg_main.m_ctx.clearRect(0, 0, m_imWidth, m_imHeight);
-        scaleImage(m_imageData, iw, ih, m_image.width, m_image.height, m_Start, m_Stop);
+        scaleColormapToImage(m_colorMapData, iw, ih, m_colorMap.width, m_colorMap.height, m_Start, m_Stop);
 
         sg_main.m_ctx.putImageData(m_imageCanvas, 0, 0);
 
@@ -693,18 +689,18 @@ function sgraph()
         let spread = sg_main.m_Spread;
         for (let i = 0, indData = 0, outdData = 0; i < m_nData; i++, indData += NDATA, outdData += NDATA_FP)
         {
-            let open = m_data[indData + INDEX_OPEN];
+            let openp = m_data[indData + INDEX_OPEN];
             let high = m_data[indData + INDEX_HIGH];
             let low = m_data[indData + INDEX_LOW];
-            let close = m_data[indData + INDEX_CLOSE];
-            let openSpread  = open  - spread;
+            let closep = m_data[indData + INDEX_CLOSE];
+            let openSpread  = openp  - spread;
             let highSpread  = high  - spread;
             let lowSpread   = low   - spread;
-            let closeSpread = close - spread;
-            m_dataFP[outdData + INDEX_OPEN_FP]         = open;
+            let closeSpread = closep - spread;
+            m_dataFP[outdData + INDEX_OPEN_FP]         = openp;
             m_dataFP[outdData + INDEX_HIGH_FP]         = high;
             m_dataFP[outdData + INDEX_LOW_FP]          = low;
-            m_dataFP[outdData + INDEX_CLOSE_FP]        = close;
+            m_dataFP[outdData + INDEX_CLOSE_FP]        = closep;
             m_dataFP[outdData + INDEX_OPEN_SPREAD_FP]  = openSpread;
             m_dataFP[outdData + INDEX_HIGH_SPREAD_FP]  = highSpread;
             m_dataFP[outdData + INDEX_LOW_SPREAD_FP]   = lowSpread;
@@ -785,17 +781,17 @@ function sgraph()
     }
     allocateImage = function(nx, ny)
     {
-        if (m_image == null || m_corrWidth != nx || m_corrHeight != ny) {
+        if (m_colorMap == null || m_corrWidth != nx || m_corrHeight != ny) {
             m_corrWidth = nx;
             m_corrHeight = ny;
             return sg_main.m_ctx.getImageData(0, 0, nx, ny);
         }
-        return m_image;
+        return m_colorMap
     }
     setCorrelationMatrix = function()
     {
-        m_image = allocateImage(m_nData, sg_main.MATRIX_Y);
-        m_imageData = m_image.data;
+        m_colorMap = allocateImage(m_nData, sg_main.MATRIX_Y);
+        m_colorMapData = m_colorMap.data;
         if (m_Corr.length == 0)
         {
             let nCorr = sg_main.m_CorrLength * 2;
@@ -810,7 +806,7 @@ function sgraph()
 
             for (let i = 1; i < m_nData; i++)
             {
-                calcCorrelationColormapColumn(m_nData - i, nCorr);
+                calcOneOrderAndColormapColumn(m_nData - i, nCorr);
             }
             m_data[INDEX_ORDER] = m_data[NDATA + INDEX_ORDER];
             m_data[INDEX_ORDER + 1] = m_data[NDATA + INDEX_ORDER + 1];
@@ -852,23 +848,23 @@ function sgraph()
         }
         return dOrder;
     }
-    function colormap0(i0) {
-        // Set column of colormap to 0
+    function setTo0colormap(i0) {
+        // Set column of colormapData to 0
         let nbpl = 4;
-        let ih = m_image.height;
-        let lw = m_image.width * nbpl;
+        let ih = m_colorMap.height;
+        let lw = m_colorMap.width * nbpl;
         let c = i0 * nbpl;
-        for (let k = 0, mCorrInd = i0; k < ih; k++, mCorrInd += m_nData, c += lw) {
-            m_imageData[c] = 0;
-            m_imageData[c + 1] = 0;
-            m_imageData[c + 2] = 0;
+        for (let k = 0; k < ih; k++, c += lw) {
+            m_colorMapData[c] = 0;
+            m_colorMapData[c + 1] = 0;
+            m_colorMapData[c + 2] = 0;
         }
     }
-    function colormap(i0, nCorr, i1Min, i1Max, dCorrScale) {
-        // Set column of colormap
+    function calcColormapColumn(i0, nCorr, i1Min, i1Max, dCorrScale) {
+        // Set column of colormapData
         let nbpl = 4;
-        let ih = m_image.height;
-        let lw = m_image.width*nbpl;
+        let ih = m_colorMap.height;
+        let lw = m_colorMap.width*nbpl;
         let ig = HIGHLIGHT;
         let c = i0 * nbpl;
         let i1Start = i0 - nCorr;
@@ -889,18 +885,18 @@ function sgraph()
                     ib = (bb > 255.0) ? 255 : Math.floor(bb);
                     ir = 0;
                 }
-                m_imageData[c] = ir;
-                m_imageData[c + 1] = ig;
-                m_imageData[c + 2] = ib;
+                m_colorMapData[c] = ir;
+                m_colorMapData[c + 1] = ig;
+                m_colorMapData[c + 2] = ib;
             }
             else {
-                m_imageData[c] = 0;
-                m_imageData[c + 1] = 0;
-                m_imageData[c + 2] = 0;
+                m_colorMapData[c] = 0;
+                m_colorMapData[c + 1] = 0;
+                m_colorMapData[c + 2] = 0;
             }
         }
     }
-    calcCorrelationColormapColumn = function (i0, nCorr, dInitialCorrPos)
+    calcOneOrderAndColormapColumn = function (i0, nCorr)
     {
         let index = i0 * NDATA;
         m_data[index + INDEX_ORDER] = 0.0;
@@ -909,7 +905,7 @@ function sgraph()
 
         let iXShift = 0;
         if (i0 <= nCorr - 1 - iXShift || i0 >= m_nData - iXShift) {
-            colormap0(i0, nCorr);
+            setTo0colormap(i0, nCorr);
             return 0.0;
         }
         let dCorrMax = -999999.0;
@@ -924,7 +920,7 @@ function sgraph()
         let sCorr = 0.0;
         let yCorr = 0.0;
         let dOrder = 0.0;
-        let ih = m_image.height;
+        let ih = m_colorMap.height;
         for (let k = 0, iCorrInd = i0; k < ih; k++, iCorrInd += m_nData) {
             let ind = i1Start - k;
             if (ind >= i1Min && ind <= i1Max) {
@@ -936,11 +932,11 @@ function sgraph()
             }
         }
         if (kCorrMax < 0) {
-            colormap0(i0);
+            setTo0colormap(i0);
             return 0.0;
         }
 
-        colormap(i0, nCorr, i1Min, i1Max, dCorrScale);
+        calcColormapColumn(i0, nCorr, i1Min, i1Max, dCorrScale);
         dOrder = getOrder(dCorrMax, i0, nCorr, kCorrMax);
         m_data[index + INDEX_ORDER] = dOrder;
         m_data[index + INDEX_MAX_CORR] = dCorrMax;
@@ -1067,6 +1063,7 @@ function sgraph()
     }
     myDrawImage = function()
     {
+        sg_main.m_ctx.lineCap = "butt";
         dt5 = new Date();
         dt6 = new Date();
         fillBitmap();
@@ -1101,7 +1098,6 @@ function sgraph()
             m_imHeight = 300;
         sg_main.m_cnv.height = m_imHeight;
         m_imageCanvas = sg_main.m_ctx.getImageData(0, 0, sg_main.m_cnv.width, sg_main.m_cnv.height);
-        sg_main.m_ctx.lineCap = "butt";
         dt2 = new Date();
     }
     set1stOptimizeRanges = function()

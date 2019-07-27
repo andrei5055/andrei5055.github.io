@@ -223,11 +223,9 @@
             <br>
             <fieldset style="border-radius: 8px;">
                 <legend>Archive Table (double-click on a row to select)</legend>
-                <textarea name="resultname" id="sg_paste_table" value="LatestResult" class="textarea button_params"
-                            spellcheck="false" onclick="sg_main.clickArhiveTable()" oncopy="sg_main.copyArhiveTable()"
-                            onpaste="sg_main.pasteArhiveTable()" oninput="sg_main.rejectArhiveInput()">
-                    Copy/Paste Table
-                </textarea>
+                <textarea name="sg_copypaste" id="sg_copypaste_area" value="Copy/Paste full Table" class="textarea button_params"
+                          spellcheck="false" onclick="sg_main.clickArhiveTable()" oncopy="sg_main.copyArhiveTable()"
+                          onpaste="sg_main.pasteArhiveTable()">Copy/Paste full Table</textarea>
                 <br>
                 <div id="sg_params_tbl" class="scrollData" style="width: 950px;">
                 </div>

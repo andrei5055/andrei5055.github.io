@@ -158,7 +158,7 @@ function sgraphgui() {
     }
     function loadFile(filePath) {
         try {
-            var xmlhttp = new XMLHttpRequest();
+            let xmlhttp = new XMLHttpRequest();
             xmlhttp.onload = historyDataLoaded;
             xmlhttp.open("GET", filePath, true);
             xmlhttp.setRequestHeader("Content-Type", "text/html");
@@ -208,6 +208,7 @@ function sgraphgui() {
         }
     }
     function paramsWindowToTop(pid) {
+        let ind = 0;
         if (isNaN(pid)) {
             if (!pid.startsWith("sg_input"))
                 return;
@@ -628,7 +629,7 @@ function sgraphgui() {
             }
             for (let i = 1; i < table.rows.length; i++) {
                 var cell = table.rows[i].cells[0];
-                if (cell.tabIndex != i) // Fix for error in Firefox
+                if (cell && cell.tabIndex && cell.tabIndex != i) // Fix for error in Firefox
                     cell.tabIndex = i;
             }
             for (let i = MAX_ROWS_IN_RESULT_TABLE + 1; i < table.rows.length; i++) {
@@ -734,76 +735,60 @@ function sgraphgui() {
             showSGraph();
         }
     }
+    function selectAll(copyAttr) {
+        if (copyAttr.selectionStart != undefined) {
+            copyAttr.selectionStart = 0;
+            copyAttr.selectionEnd = 999999;
+        }
+        else {
+            copyAttr.setSelectionRange(0, 999999);
+            copyAttr.select();
+        }
+    }
     function clickArhiveTable() {
-        let copyAttr = document.getElementById("sg_paste_table");
+        let copyAttr = document.getElementById("sg_copypaste_area");
         if (copyAttr) {
-            if (copyAttr.selectionStart != undefined) {
-                copyAttr.selectionStart = 0;
-                copyAttr.selectionEnd = 999999;
-            }
-            else {
-                copyAttr.setSelectionRange(0, 999999);
-                copyAttr.select();
-            }
+            selectAll(copyAttr);
         }
     }
     function copyPasteArchiveFinished() {
         clearTimeout(m_copyReadyTm);
-        let copyAttr = document.getElementById("sg_paste_table");
+        let copyAttr = document.getElementById("sg_copypaste_area");
         if (copyAttr) {
-            copyAttr.value = "Copy/Paste Table";
-            if (copyAttr.selectionStart != undefined) {
-                copyAttr.selectionStart = 0;
-                copyAttr.selectionEnd = 999999;
-            }
-            else {
-                copyAttr.setSelectionRange(0, 999999);
-                copyAttr.select();
-            }
+            copyAttr.value = "Copy/Paste full Table";
+            selectAll(copyAttr);
         }
     }
     function copyArchiveReady() {
         clearTimeout(m_copyReadyTm);
-        let copyAttr = document.getElementById("sg_paste_table");
+        let copyAttr = document.getElementById("sg_copypaste_area");
         if (copyAttr) {
             copyAttr.value = "Done";
             m_copyReadyTm = window.setTimeout(copyPasteArchiveFinished, 1000);
         }
     }
     function copyArhiveTable() {
-        let copyAttr = document.getElementById("sg_paste_table");
+        let copyAttr = document.getElementById("sg_copypaste_area");
         if (copyAttr) {
             copyAttr.value = copyTableToString();
-            copyAttr.setSelectionRange(0, 999999);
-            if (copyAttr.selectionStart != undefined) {
-                copyAttr.selectionStart = 0;
-                copyAttr.selectionEnd = 999999;
-            }
-            else {
-                copyAttr.setSelectionRange(0, 999999);
-                copyAttr.select();
-            }
-            m_copyReadyTm = window.setTimeout(copyArchiveReady, 50);
+            selectAll(copyAttr);
+            m_copyReadyTm = window.setTimeout(copyArchiveReady, 300);
+        }
+    }
+    function pasteArchiveValue() {
+        clearTimeout(m_copyReadyTm);
+        let pasteAttr = document.getElementById("sg_copypaste_area");
+        if (pasteAttr) {
+            copyParamsUsedToTable(pasteAttr.value);
+            pasteAttr.value = "Done";
+            m_copyReadyTm = window.setTimeout(copyPasteArchiveFinished, 1000);
         }
     }
     function pasteArhiveTable() {
-        let pasteAttr = document.getElementById("sg_paste_table");
+        let pasteAttr = document.getElementById("sg_copypaste_area");
         if (pasteAttr) {
-            pasteAttr.value = "";
-            m_lastPasteTime = new Date();
-        }
-    }
-    function rejectArhiveInput() {
-        let pasteAttr = document.getElementById("sg_paste_table");
-        if (pasteAttr) {
-            let tm = new Date();
-            if (tm.getTime() - m_lastPasteTime.getTime() < 300) {
-                copyParamsUsedToTable(pasteAttr.value);
-                pasteAttr.value = "Done";
-                m_copyReadyTm = window.setTimeout(copyPasteArchiveFinished, 1000);
-            }
-            else
-                m_copyReadyTm = window.setTimeout(copyPasteArchiveFinished, 10);
+            selectAll(pasteAttr);
+            m_copyReadyTm = window.setTimeout(pasteArchiveValue, 300);
         }
     }
     function copyResultToTable() {
@@ -1320,7 +1305,6 @@ function sgraphgui() {
         showHideShowMenu: showHideShowMenu,
         hideParamsWindow: hideParamsWindow,
         copyResultToTable: copyResultToTable,
-        rejectArhiveInput: rejectArhiveInput,
         paramsWindowClick: paramsWindowClick,
         onClickedOptimize: onClickedOptimize,
         getOptimizeRanges: getOptimizeRanges,
