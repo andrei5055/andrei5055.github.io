@@ -1,4 +1,4 @@
-// SGraph - Create bitmap with correlation colormap and optional graphics
+// SGraph - Create bitmap with autocorrelation colormapData and optional graphics
 /*
 Copyright (c) 2019, Leonid M Tertitski (Leonid.M.Tertitski@gmail.com)
 All rights reserved.
@@ -26,33 +26,29 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 function sgraph()
 {
-    /* following "enums" must be on top of all other attributes */
-    var ind = 0;
+    /* following "var" must be on top of all other attributes definitions*/
+    let ind = 0;
     var INDEX_OPEN = ind; ind++;
     var INDEX_HIGH = ind; ind++;
     var INDEX_LOW = ind; ind++;
     var INDEX_CLOSE = ind; ind++;
     var INDEX_ADJ_CLOSE = ind; ind++;
     var INDEX_VOLUME = ind; ind++;
-    var INDEX_AVERAGE = ind; ind++;
     var INDEX_PROFIT = ind; ind++;
-    var INDEX_ORDER = ind; ind++;
     var INDEX_MAX_CORR = ind; ind++;
     var INDEX_MAX_CORR_DT = ind; ind++;
     var NDATA = ind;
 
+    var INDEX_ORDER = NDATA; // Fake index: data are not in m_data array, but in array m_order
+
     ind = 0;
     var INDEX_OPEN_FP = ind; ind++;
     var INDEX_OPEN_SPREAD_FP = ind; ind++;
-    var INDEX_HIGH_FP = ind; ind++;
     var INDEX_HIGH_SPREAD_FP = ind; ind++;
-    var INDEX_LOW_FP = ind; ind++;
     var INDEX_LOW_SPREAD_FP = ind; ind++;
     var INDEX_CLOSE_FP = ind; ind++;
     var INDEX_CLOSE_SPREAD_FP = ind; ind++;
     var INDEX_MAX_LOST_FP = ind; ind++;
-    var INDEX_DELTA_FP = ind; ind++;
-    var INDEX_DELTA2_FP = ind; ind++;
     var NDATA_FP = ind;
 
     ind = 0;
@@ -64,11 +60,11 @@ function sgraph()
     var eRun2ndOptimizationLoop = ind; ind++;
     var eStop2ndOptimizationLoop = ind; ind++;
     var eEndOfOptimization = ind; ind++;
-    /* add new attributes after "enums" above */
 
     var HIGHLIGHT = 35;
     var MIN_LENGTH = 100;
-    var N_C = 10;
+
+    /* add new attributes below this line */
     var dt1 = new Date();
     var dt2 = new Date();
     var dt3 = new Date();
@@ -77,10 +73,15 @@ function sgraph()
     var dt6 = new Date();
     var dt7 = new Date();
     var dt8 = new Date();
+    var dt9 = new Date();
+    var dt10 = new Date();
+    var m_loop1Time = 0;
+    var m_loop1Count = 0;
 
     var onOptimizeEnd = null;
     var onDrawEnd = null;
-    var m_image = null;
+    var m_colorMap = null;
+    var m_colorMapData = null;
     var m_imageCanvas = null;
     var m_imWidth = 0;
     var m_imHeight = 0;
@@ -91,7 +92,7 @@ function sgraph()
 
     var m_Start = 0;
     var m_Stop = 0;
-    var m_nData = null;
+    var m_nData = 0;
     var m_ranges = new Array(0);
     var m_optimumProfit = 0.0;
     var m_optimize = eNoOptimization;
@@ -102,9 +103,9 @@ function sgraph()
 
     var m_xMouseDown = 0;
     var m_yMouseDown = 0;
+    var m_order = new Array();
     var m_data = new Array();
     var m_dataFP = new Array();
-    var m_dataCorr = new Array();
     var m_Corr = new Array();
     var m_gName = new Array();
     var m_gMin = new Array();
@@ -117,16 +118,24 @@ function sgraph()
     var m_dMinPr = 0.0;
     var m_dMaxPr = 0.0;
 
-    var m_prevMaxCorr = 0.0;
-    var m_prevMaxCorrPos = -1;
     var m_optimizeTimeout = 0;
-    var m_optimum_PredScale = 0;
+    var m_optimum_OrderScale = 0;
     var m_optimum_MaxLost = 0;
-    var m_optimum_ave = 0;
     var m_optimum_ncorr = 0;
     var m_profit = 0.0;
     var m_maxCorr = 0.0;
     var m_minCorr = 0.0;
+    var m_gpu = null;
+    var m_dataGPUSet = null;
+    var m_dataGPU = null;
+    var m_dataFPGPU = null;
+    var m_dataFPGPUSet = null;
+    var m_profitMatrixGPU = null;
+    var m_getCorrelationMatrixGPU = null;
+    var m_corrMatrixGPU = null;
+    var m_spreadUsed = -999999.0;
+    var m_corrLengthUsed = -999999.0;
+    var m_bCalcOrder = true;
     zoom = function(iZoom)
     {
         if (m_nData > 0) {
@@ -158,10 +167,10 @@ function sgraph()
             }
         }
     }
-    drawCandlestick = function(ix1, iww, open, high, low, close)
+    drawCandlestick = function(ix1, iww, openp, high, low, closep)
     {
-        let closeOpenMax = Math.max(close, open);
-        let closeOpenMin = Math.min(close, open);
+        let closeOpenMax = Math.max(closep, openp);
+        let closeOpenMin = Math.min(closep, openp);
         let iy = Math.floor(high);
         let iy1 = Math.floor(closeOpenMax);
         let iww2 = Math.floor(iww / 2);
@@ -169,7 +178,7 @@ function sgraph()
         let urRect = 0;
         let ugRect = 255;
         let ubRect = 0;
-        if (close < open)
+        if (closep < openp)
         {
             urRect = 240;
             ugRect = 100;
@@ -193,66 +202,6 @@ function sgraph()
         sg_main.m_ctx.moveTo(ix1, m_imHeight - 1 - iy);
         sg_main.m_ctx.lineTo(ix1, m_imHeight - 1 - iy1);
         sg_main.m_ctx.stroke();
-    }
-    calculateSumXY = function(iShift)
-    {
-        // Calculate Sum(X*Y)
-        let s2 = 0.0;
-        let x0 = 0.0, x1;
-        let y0 = 0.0, y1;
-        let indx = (iShift+1) * NDATA;
-        let indy = NDATA;
-        let j = (iShift+1)*N_C+2;
-        for (let i = iShift+1; i < m_nData; i++, j += N_C, indx += NDATA, indy += NDATA)
-        {
-            x1 = m_data[indx + INDEX_HIGH];
-            y1 = m_data[indy + INDEX_HIGH];
-            x1 -= m_data[indx + INDEX_AVERAGE];
-            y1 -= m_data[indy + INDEX_AVERAGE];
-            s2 += x1*y1;
-            m_dataCorr[j] = s2;
-        }
-    }
-    calculateCorrelation = function(j, nCorr)
-    {
-        let iCorr = j * m_nData;
-        let iShift = j+nCorr;
-    
-        calculateSumXY(iShift);
-
-        let indCorr = iShift+nCorr+1;
-        if (indCorr < m_nData)
-        {
-            for (let i = 0; i < indCorr; i++)
-                m_Corr[iCorr+i] = 0.0;
-        }
-        else
-            iShift = iShift;
-
-        let indx = indCorr * N_C;
-        let indy = indx - iShift * N_C;
-        let indxs = indx - nCorr * N_C;
-        let indys = indy - nCorr * N_C;
-        for (let i = indCorr; i < m_nData; i++, indx += N_C, indy += N_C, indxs += N_C, indys += N_C)
-        {
-            let a = nCorr *(m_dataCorr[indx+2] - m_dataCorr[indxs+2]);
-            let bx = m_dataCorr[indx] - m_dataCorr[indxs];
-            let by = m_dataCorr[indy] - m_dataCorr[indys];
-            let b = bx * by;
-            let cxx = nCorr *(m_dataCorr[indx+1] - m_dataCorr[indxs+1]);
-            let cx = bx * bx ;
-            let cc = cxx - cx;
-            let dyy = nCorr *(m_dataCorr[indy+1] - m_dataCorr[indys+1]);
-            let dy = by * by ;
-            let dd = dyy - dy;
-            let ee = cc * dd;
-            let corr = (ee > 0.0000000001) ? (a - b) / Math.sqrt(ee) : 0.0;
-            m_Corr[iCorr+i] = corr;
-            if (m_minCorr > corr)
-                m_minCorr = corr;
-            if (m_maxCorr < corr)
-                m_maxCorr = corr;
-        }
     }
     getInterpolatedValueInt = function (ind, width, start, stop) {
         return (Math.floor((ind - start) * (width - 1) / (stop - start - 1)));
@@ -284,7 +233,564 @@ function sgraph()
         }
         return orderStr;
     }
-    getProfit = function()
+
+    getProfitOpt = function (N, iStepOrder, M, iStepLost) {
+        let newOpt = false;
+        let profiDt1 = new Date();
+        let orderScale = new Array(N);
+        for (let i = 0; i < N; i++) {
+            orderScale[i] = m_ranges[0] + i * m_ranges[2] * iStepOrder;
+            if (orderScale[i] > m_ranges[1]) {
+                orderScale[i] = m_ranges[1];
+            }
+        }
+
+        let maxLost = new Array(M);
+        for (let i = 0; i < M; i++) {
+            maxLost[i] = m_ranges[3] + i * m_ranges[5] * iStepLost;
+            if (maxLost[i] > m_ranges[4]) {
+                maxLost[i] = m_ranges[4];
+            }
+        }
+        if (sg_main.m_bUseGPU && m_optimize != eNoOptimization) {
+            if (!m_dataFPGPU) {
+                m_dataFPGPU = m_dataFPGPUSet(m_dataFP);
+            }
+            let istart = Math.floor(m_Start);
+            let istop = Math.floor(m_Stop);
+            let ss = m_profitMatrixGPU(m_dataFPGPU, m_order, m_nData, orderScale, maxLost,
+                sg_main.m_nDaysToKeepOpen, sg_main.m_Spread, istart, istop, NDATA_FP,
+                INDEX_OPEN_FP, INDEX_CLOSE_FP, INDEX_MAX_LOST_FP,
+                INDEX_OPEN_SPREAD_FP, INDEX_HIGH_SPREAD_FP, INDEX_LOW_SPREAD_FP, INDEX_CLOSE_SPREAD_FP);
+            for (let i = 0; i < M; i++) {
+                for (let j = 0; j < N; j++) {
+                    if (m_optimumProfit < ss[i][j]) {
+                        m_optimumProfit = ss[i][j];
+                        m_optimum_OrderScale = orderScale[j];
+                        m_optimum_MaxLost = maxLost[i];
+                        newOpt = true;
+                    }
+                }
+            }
+        }
+        else {
+            for (let i = 0; i < M; i++) {
+                for (let j = 0; j < N; j++) {
+                    let s = getProfit(orderScale[j], maxLost[i]);
+                    if (m_optimumProfit < s) {
+                        m_optimumProfit = s;
+                        m_optimum_OrderScale = orderScale[j];
+                        m_optimum_MaxLost = maxLost[i];
+                        newOpt = true;
+                    }
+                }
+            }
+        }
+        let profiDt2 = new Date();
+        m_loop1Time += profiDt2.getTime() - profiDt1.getTime();
+        m_loop1Count += N * M;
+
+        if (newOpt) {
+            //console.log("Calculated max profit=" + m_optimumProfit);
+            sg_main.m_OrderScale = m_optimum_OrderScale;
+            sg_main.m_MaxLost = m_optimum_MaxLost;
+            if (m_optimum_ncorr != sg_main.m_CorrLength) {
+                m_optimum_ncorr = sg_main.m_CorrLength;
+                if (!sg_main.m_bUseGPU)
+                    processLoadedData();
+            }
+        }
+    }
+    setupGPU = function (nOpt) {
+        let iStep = (nOpt == 2) ? 1 : 2;
+        let N = Math.floor((m_ranges[1] - m_ranges[0]) / (iStep * m_ranges[2]) + 1.1);
+        let M = Math.floor((m_ranges[4] - m_ranges[3]) / (iStep * m_ranges[5]) + 1.1);
+        setGPUKernels(N, iStep, M, iStep, m_nData, sg_main.MATRIX_Y);
+    }
+    getCorrelationMatrix = function (nCorr) {
+        if (m_corrLengthUsed != sg_main.m_CorrLength) {
+            dt9 = new Date();
+            m_corrLengthUsed = sg_main.m_CorrLength;
+            m_minCorr = 1e+17;
+            m_maxCorr = -1e+17;
+            m_Corr.length = 0;
+            if (sg_main.m_bUseGPU && m_optimize != eNoOptimization) {
+                getCorrelationMatrixGPU(nCorr);
+            }
+            else {
+                getCorrelationMatrixCPU(nCorr);
+                //checkCorrelationMatrixCPU(nCorr);
+            }
+            if (Math.abs(m_minCorr - m_maxCorr) < 0.0001) {
+                m_minCorr = -1.0;
+                m_maxCorr = 1.0;
+            }
+            dt10 = new Date();
+        }
+    }
+    getCorrelationMatrixGPU = function (nCorr) {
+        if (!m_dataGPU) {
+            m_dataGPU = m_dataGPUSet(m_data);
+        }
+        let gpuCorr = m_getCorrelationMatrixGPU(m_dataGPU, nCorr, NDATA, INDEX_HIGH);
+        let iend = sg_main.MATRIX_Y;
+        if (gpuCorr.length == iend) {
+            m_Corr = new Array(m_nData * iend);
+            let k = 0;
+            for (let i = 0; i < iend; i++) {
+                for (let j = 0; j < m_nData; j++, k++) {
+                    corr = gpuCorr[i][j];
+                    if (m_minCorr > corr)
+                        m_minCorr = corr;
+                    if (m_maxCorr < corr)
+                        m_maxCorr = corr;
+                    m_Corr[k] = corr;
+                }
+            }
+        }
+
+    }
+
+    checkCorrelationMatrixCPU = function (ncorr) {
+        let indCorr = 0;
+        let ny = sg_main.MATRIX_Y;
+        let ncorr2 = ncorr * 2;
+        let ncorr2p1 = ncorr2 + 1;
+        let ncorrh = ncorr / 2;
+        let ncorrh1h = (ncorr - 1) / 2;
+        let dncorr = 1.0 / ncorr;
+        let d2ncorr = 1.0 / ncorrh / ncorrh1h;
+        let xc = new Array(ncorr);
+        let diffMax = -999999.0;
+        for (let x = 0; x < m_nData; x++) {
+            indCorr = x;
+            if (indCorr < ncorr2p1) {
+                for (let y = 0; y < ny; y++, indCorr += m_nData) {
+                    m_Corr[indCorr] = 0.0;
+                }
+            }
+            let indx = x * NDATA + INDEX_HIGH;
+            let avex1 = 0.0;
+            let avex2 = 0.0;
+            let indxt = indx;
+            for (let i = 0; i < ncorr; i++) {
+                if (i >= ncorrh) {
+                    avex1 += m_data[indxt];
+                }
+                else {
+                    avex2 += m_data[indxt];
+                }
+                indxt -= NDATA;
+            }
+            let avx = (avex1 + avex2) * dncorr;
+            let dtx = (avex2 - avex1) * d2ncorr;
+            avx += dtx * ncorrh1h;
+            indxt = indx;
+            let avxt = avx;
+            let sqx = 0.0;
+            for (let j = 0; j < ncorr; j++) {
+                let dx = (m_data[indxt] - avxt);
+                sqx += dx * dx;
+                avxt -= dtx;
+                indxt -= NDATA;
+            }
+            indxt = indx;
+            for (let k = 0; k < ncorr; k++) {
+                xc[k] = (m_data[indxt] - avx);
+                avx -= dtx;
+                indxt -= NDATA;
+            }
+            for (let y = 0; y < ny; y++) {
+                if (x - y < ncorr2p1) {
+                    m_Corr[indCorr] = 0.0;
+                }
+                else {
+                    let indy = indx - (ncorr + y) * NDATA;
+                    let avey1 = 0.0;
+                    let avey2 = 0.0;
+                    let indyt = indy;
+                    for (let i = 0; i < ncorr; i++) {
+                        if (i >= ncorrh) {
+                            avey1 += m_data[indyt];
+                        }
+                        else {
+                            avey2 += m_data[indyt];
+                        }
+                        indyt -= NDATA;
+                    }
+                    let avy = (avey1 + avey2) * dncorr;
+                    let dty = (avey2 - avey1) * d2ncorr;
+                    let corr = 0.0;
+                    avy += dty * ncorrh1h;
+                    indxt = indx;
+                    indyt = indy;
+                    let avyt = avy;
+                    let sqy = 0.0;
+                    for (let j = 0; j < ncorr; j++) {
+                        let dy = (m_data[indyt] - avyt);
+                        sqy += dy * dy;
+                        avyt -= dty;
+                        indyt -= NDATA;
+                    }
+                    let d = sqx * sqy;
+                    if (d > 0.000001)
+                        d = 1.0 / Math.sqrt(d);
+                    else
+                        d = 0.0;
+                    for (let k = 0; k < ncorr; k++) {
+                        corr += xc[k] * (m_data[indy] - avy);
+                        avy -= dty;
+                        indy -= NDATA;
+                    }
+                    corr = corr * d;
+                    let diff = Math.abs(m_Corr[indCorr] - corr);
+                    if (diffMax < diff)
+                        diffMax = diff;
+                    //m_Corr[indCorr] = corr;
+
+                    if (m_minCorr > corr)
+                        m_minCorr = corr;
+                    if (m_maxCorr < corr)
+                        m_maxCorr = corr;
+                }
+                indCorr += m_nData;
+            }
+        }
+        if (diffMax > 0.001)
+            alert("Corr matrix difference=" + diffMax);
+    }
+    getCorrelationMatrixCPU = function (ncorr) {
+        let indCorr = 0;
+        let matrixh = sg_main.MATRIX_Y;
+        let ncorr2p1 = ncorr * 2 + 1;
+        let ncorrm1 = ncorr - 1;
+        let ncorrh = ncorr / 2;
+        let ncorrhp1 = ncorrh + 1;
+        let ncorrm1h = (ncorr - 1) / 2;
+        let dncorr = 1.0 / ncorr;
+        let d2ncorr = 1.0 / ncorrh / ncorrm1h;
+        let xc = new Array(ncorr);
+        let e1 = new Array(m_nData);
+        let e2 = new Array(m_nData);
+        let e3 = new Array(m_nData);
+        m_Corr = new Array(m_nData * matrixh);
+        let e1sum = 0.0;
+        let e2sum = 0.0;
+        let e3sum = 0.0;
+        let e4sum = 0.0;
+        for (let i = 0, indv = INDEX_HIGH; i < m_nData; i++, indv += NDATA) {
+            let v = m_data[indv];
+            e1sum += v;
+            e2sum += v * v;
+            e1[i] = e1sum;
+            e2[i] = e2sum;
+            
+            if (i < ncorr) {
+                e3sum += v * i;
+                e4sum += i * i;
+            }
+            else {
+               e3sum = e3sum + (v * (ncorr - 1) - (e1[i - 1] - e1[i - ncorr]));
+            }
+            e3[i] = e3sum;
+        }
+        for (let indCorr1 = 0; indCorr1 < m_nData; indCorr1++) {
+            indCorr = indCorr1;
+            if (indCorr < ncorr2p1) {
+                for (let j = 0; j < matrixh; j++, indCorr += m_nData) {
+                    m_Corr[indCorr] = 0.0;
+                }
+            }
+            let indx = indCorr1 * NDATA + INDEX_HIGH;
+            let avex2 = e1[indCorr1] - e1[indCorr1 - ncorrh];
+            let avex1 = e1[indCorr1 - ncorrh] - e1[indCorr1 - ncorr];
+            let avx = (avex1 + avex2) * dncorr;
+            let dtx = (avex2 - avex1) * d2ncorr;
+            let a = dtx;
+            let b = avx - dtx * ncorrm1h;
+            let sqx = e2[indCorr1] - e2[indCorr1 - ncorr] -
+                2.0 * (e3[indCorr1] * a + (e1[indCorr1] - e1[indCorr1 - ncorr]) * b) +
+                e4sum * a * a + ncorr * ncorrm1 * a * b + b * b * ncorr;
+            avx += dtx * ncorrm1h;
+            indxt = indx;
+            for (let k = 0; k < ncorr; k++) {
+                xc[k] = (m_data[indxt] - avx);
+                avx -= dtx;
+                indxt -= NDATA;
+            }
+            for (let m = 0; m < matrixh; m++) {
+                if (indCorr1 - m < ncorr2p1) {
+                    m_Corr[indCorr] = 0.0;
+                }
+                else {
+                    let indCorr0 = indCorr1 - ncorr - m;
+                    let indy = indx - (ncorr + m) * NDATA;
+                    let avey2 = e1[indCorr0] - e1[indCorr0 - ncorrh];
+                    let avey1 = e1[indCorr0 - ncorrh] - e1[indCorr0 - ncorr];
+                    let avy = (avey1 + avey2) * dncorr;
+                    let dty = (avey2 - avey1) * d2ncorr;
+                    let a = dty;
+                    let b = avy - dty * ncorrm1h;
+                    let sqy = e2[indCorr0] - e2[indCorr0 - ncorr] -
+                        2.0 * (e3[indCorr0] * a + (e1[indCorr0] - e1[indCorr0 - ncorr]) * b) +
+                        e4sum * a * a + ncorr*ncorrm1*a*b + b*b*ncorr;
+                    let d = sqx * sqy;
+                    if (d > 0.000001)
+                        d = 1.0 / Math.sqrt(d);
+                    else
+                        d = 0.0;
+                    avy += dty * ncorrm1h;
+                    let corr = 0.0;
+                    for (let k = 0; k < ncorr; k++) {
+                        corr += xc[k] * (m_data[indy] - avy);
+                        avy -= dty;
+                        indy -= NDATA;
+                    }
+                    corr = corr * d;
+                    m_Corr[indCorr] = corr;
+
+                    if (m_minCorr > corr)
+                        m_minCorr = corr;
+                    if (m_maxCorr < corr)
+                        m_maxCorr = corr;
+                }
+                indCorr += m_nData;
+            }
+        }
+    }
+    setGPUKernels = function (N, iStepOrder, M, iStepLost, nData, nY) {
+        m_dataGPUSet = null;
+        m_dataFPGPUSet = null;
+        m_profitMatrixGPU = null;
+        m_getCorrelationMatrixGPU = null;
+        if (m_dataGPUSet)
+            m_dataGPUSet.destroy();
+        if (m_dataFPGPUSet)
+            m_dataFPGPUSet.destroy();
+        if (m_profitMatrixGPU)
+            m_profitMatrixGPU.destroy();
+        if (m_getCorrelationMatrixGPU)
+            m_getCorrelationMatrixGPU.destroy();
+        if (m_gpu)
+            m_gpu.destroy();
+        let optData = {
+            setPipeline: true,
+            output: [nData * NDATA]
+        };
+        let optDataFP = {
+            setPipeline: true,
+            output: [nData * NDATA_FP]
+        };
+        let optProfit = {
+            output: [N, M]
+        };
+        let optCorr = {
+            output: [nData, nY]
+        };
+        if (typeof GPU == "undefined") {
+            alert("GPU not defined. Check that you included support for GPU.\nGPU usage disabled");
+            sg_main.m_bUseGPU = false;
+            return;
+        }
+        if (!GPU || !GPU.isGPUSupported || !GPU.isSinglePrecisionSupported) {
+            alert("GPU not supported on your PC or by this Browser!\nGPU usage disabled");
+            sg_main.m_bUseGPU = false;
+            return;
+        }
+        if (!GPU.isSinglePrecisionSupported) {
+            alert("GPU floating point operations not supported on your PC or by this Browser!\nGPU usage disabled");
+            sg_main.m_bUseGPU = false;
+            return;
+        }
+        m_gpu = new GPU({ mode: 'gpu' });
+        //m_gpu = new GPU({ mode: 'dev' });
+        if (!m_gpu) {
+            alert("Can't create GPU modulle\nGPU usage disabled");
+            sg_main.m_bUseGPU = false;
+            return;
+        }
+        m_dataGPUSet = m_gpu.createKernel(function (m_data) {
+            return m_data[this.thread.x];
+        }, optData);
+
+        m_dataFPGPUSet = m_gpu.createKernel(function (m_dataFP) {
+            return m_dataFP[this.thread.x];
+        }, optDataFP);
+
+        m_getCorrelationMatrixGPU = m_gpu.createKernel(function (m_data, ncorr, NDATA, INDEX_HIGH) {
+            let ncorr2 = ncorr * 2;
+            if (this.thread.x - this.thread.y < ncorr2) {
+                return 0.0;
+            }
+            else {
+                let ncorrh = ncorr / 2;
+                let ncorrm1h = (ncorr - 1) / 2;
+                let dncorr = 1.0 / ncorr;
+                let d2ncorr = 1.0 / ncorrh / ncorrm1h;
+                let indx = this.thread.x * NDATA + INDEX_HIGH;
+                let indy = indx - (ncorr + this.thread.y) * NDATA;
+                let avex1 = 0.0;
+                let avey1 = 0.0;
+                let avex2 = 0.0;
+                let avey2 = 0.0;
+                let indxt = indx;
+                let indyt = indy;
+                for (let i = 0; i < ncorr; i++) {
+                    if (i >= ncorrh) {
+                        avex1 += m_data[indxt];
+                        avey1 += m_data[indyt];
+                    }
+                    else {
+                        avex2 += m_data[indxt];
+                        avey2 += m_data[indyt];
+                    }
+                    indxt -= NDATA;
+                    indyt -= NDATA;
+                }
+                let avx = (avex1 + avex2) * dncorr;
+                let avy = (avey1 + avey2) * dncorr;
+                let dtx = (avex2 - avex1) * d2ncorr;
+                let dty = (avey2 - avey1) * d2ncorr;
+                avx += dtx * ncorrm1h;
+                avy += dty * ncorrm1h;
+                indxt = indx;
+                indyt = indy;
+                let avxt = avx;
+                let avyt = avy;
+                let sqx = 0.0;
+                let sqy = 0.0;
+                for (let j = 0; j < ncorr; j++) {
+                    let dx = (m_data[indxt] - avxt);
+                    sqx += dx * dx;
+                    let dy = (m_data[indyt] - avyt);
+                    sqy += dy * dy;
+                    avxt -= dtx;
+                    avyt -= dty;
+                    indxt -= NDATA;
+                    indyt -= NDATA;
+                }
+                let d = sqx * sqy;
+                if (d > 0.000001)
+                    d = 1.0 / Math.sqrt(d);
+                else
+                    d = 0.0;
+                let s = 0;
+                for (let k = 0; k < ncorr; k++) {
+                    s += (m_data[indx] - avx) * (m_data[indy] - avy);
+                    avx -= dtx;
+                    avy -= dty;
+                    indx -= NDATA;
+                    indy -= NDATA;
+                }
+                s = s * d;
+                return s;
+            }
+        }, optCorr);
+        m_profitMatrixGPU = m_gpu.createKernel(function (m_dataFP, m_order, nData, orderScale, maxLost,
+                nDaysToKeepOpen, spread, iStartP, iStopP, NDATA_FP,
+                INDEX_OPEN_FP, INDEX_CLOSE_FP, INDEX_MAX_LOST_FP,
+                INDEX_OPEN_SPREAD_FP, INDEX_HIGH_SPREAD_FP, INDEX_LOW_SPREAD_FP, INDEX_CLOSE_SPREAD_FP) {
+            let s = 0.0;
+            let buyPrice = 0.0;
+            let bOrder = false;
+            let sellLimit = buyPrice;
+            let prof = 0.0;
+            let closep = 0.0;
+            let todayProfit = 0.0;
+            let nDaysOpenPos = 0;
+            let iStart = iStartP;
+            let iStop = iStopP;
+            if (iStart < 2)
+                iStart = 2;
+            if (iStop < nData)
+                iStop++;
+            let vMaxLost = maxLost[this.thread.y];
+            let vOrderScale = orderScale[this.thread.x];
+            let indData = iStart * NDATA_FP;
+            for (let i = 0; i < nData; i++) {
+                if (i >= iStop) {
+                    break;
+                }
+                else {
+                    if (i >= iStart) {
+                        let openp = m_dataFP[indData + INDEX_OPEN_FP];
+                        let highSpread = m_dataFP[indData + INDEX_HIGH_SPREAD_FP];
+                        closep = m_dataFP[indData + INDEX_CLOSE_FP];
+                        let dMaxLost = m_dataFP[indData + INDEX_MAX_LOST_FP] * vMaxLost;
+                        let delta = m_order[i] * vOrderScale;
+
+                        todayProfit = 0.0;
+
+                        if (!bOrder) {
+                            if (delta > spread) {
+                                buyPrice = openp + spread;
+                                sellLimit = openp + delta;
+                                bOrder = true;
+                                nDaysOpenPos = 0;
+                            }
+                        }
+
+                        if (bOrder) {
+                            if (dMaxLost != 0.0) {
+                                let openSpread = m_dataFP[indData + INDEX_OPEN_SPREAD_FP];
+                                if (buyPrice - openSpread > dMaxLost) {
+                                    todayProfit = openSpread - buyPrice;
+                                    bOrder = false;
+                                }
+                                else {
+                                    if ((sellLimit <= highSpread) && (openp > closep)) {
+                                        // Assume (if open > close) sell limit triggered before lost limit
+                                        bOrder = true; // Nop
+                                    }
+                                    else if (buyPrice - m_dataFP[indData + INDEX_LOW_SPREAD_FP] > dMaxLost) {
+                                        todayProfit = -dMaxLost;
+                                        bOrder = false;
+                                    }
+                                }
+                            }
+                            if (bOrder) {
+                                if (sellLimit <= highSpread) {
+                                    todayProfit = sellLimit - buyPrice;
+                                    bOrder = false;
+                                }
+                                else {
+                                    if (nDaysOpenPos < nDaysToKeepOpen) {
+                                        nDaysOpenPos++;
+                                    }
+                                    else {
+                                        prof = m_dataFP[indData + INDEX_CLOSE_SPREAD_FP] - buyPrice;
+                                        // close position at the end of the day
+                                        todayProfit = prof;
+                                        bOrder = false;
+                                    }
+                                }
+                            }
+                        }
+                        s += todayProfit;
+                        indData += NDATA_FP;
+                    }
+                }
+            }
+            if ((iStop == nData) && bOrder) {
+                todayProfit = closep - spread - buyPrice;
+                s += todayProfit;
+            }
+           // return s;
+            return indData + s / 100.0;
+        }, optProfit);
+
+        if (!m_dataGPUSet || !m_dataFPGPUSet || !m_getCorrelationMatrixGPU || !m_profitMatrixGPU) {
+            alert("Error in one of the GPU function\nGPU usage disabled");
+            m_dataGPUSet = null;
+            m_dataFPGPUSet = null;
+            m_profitMatrixGPU = null;
+            m_getCorrelationMatrixGPU = null;
+            sg_main.m_bUseGPU = false;
+            return;
+        }
+        m_profitMatrixGPU.setLoopMaxIterations(m_nData);
+    }
+    getProfit = function(vOrderScale, vMaxLost)
     {
         let s = 0.0;
         let dMin = 999999.0;
@@ -296,8 +802,7 @@ function sgraph()
         let bOrder = false;
         let sellLimit = buyPrice;
         let prof = 0.0;
-        let nOrders = 0;
-        let close = 0.0;
+        let closep = 0.0;
         let todayProfit = 0.0;
         let nDaysOpenPos = 0;
         let nDaysToKeepOpen = sg_main.m_nDaysToKeepOpen;
@@ -307,13 +812,13 @@ function sgraph()
             iStart = 2;
         if (iStop < m_nData)
             iStop++;
-        for (let i = iStart, indData = iStart * NDATA_FP; i < iStop; i++, indData += NDATA_FP)
+        for (let i = iStart, indData = iStart * NDATA_FP, outData = iStart * NDATA; i < iStop; i++, indData += NDATA_FP, outData += NDATA)
         {
-            let open = m_dataFP[indData + INDEX_OPEN_FP];
+            let openp = m_dataFP[indData + INDEX_OPEN_FP];
             let highSpread = m_dataFP[indData + INDEX_HIGH_SPREAD_FP];
-            close = m_dataFP[indData + INDEX_CLOSE_FP];
-            let dMaxLost = m_dataFP[indData + INDEX_MAX_LOST_FP];
-            let delta = m_dataFP[indData + INDEX_DELTA_FP];
+            closep = m_dataFP[indData + INDEX_CLOSE_FP];
+            let dMaxLost = m_dataFP[indData + INDEX_MAX_LOST_FP] * vMaxLost;
+            let delta = m_order[i] * vOrderScale;
   
             todayProfit = 0.0;
         
@@ -321,9 +826,8 @@ function sgraph()
             {
                 if (delta > spread)
                 {
-                    buyPrice = open + spread;
-                    sellLimit = open + delta;
-                    nOrders++;
+                    buyPrice = openp + spread;
+                    sellLimit = openp + delta;
                     bOrder = true;
                     nDaysOpenPos = 0;
                 }
@@ -341,7 +845,7 @@ function sgraph()
                     }
                     else
                     {
-                        if (sellLimit <= highSpread && open > close)
+                        if (sellLimit <= highSpread && openp > closep)
                         {
                             // Assume (if open > close) sell limit triggered before lost limit 
                         }
@@ -376,7 +880,7 @@ function sgraph()
                 }
             }
             s += todayProfit;
-            m_data[indData + INDEX_PROFIT] = s;
+            m_data[outData + INDEX_PROFIT] = s;
             if (dMin > delta)
                 dMin = delta;
             if (dMax < delta)
@@ -388,7 +892,7 @@ function sgraph()
         }
         if (iStop == m_nData && bOrder)
         {
-            todayProfit = close - spread - buyPrice;
+            todayProfit = closep - spread - buyPrice;
             s += todayProfit;
         }
         m_dMin = dMin;
@@ -397,6 +901,7 @@ function sgraph()
         m_dMaxPr = dMaxPr;
         m_profit = s;
 
+        //console.log("Calculated dis profit=" + s);
         return s;
     }
     RGB2Hex = function(r, g, b) {
@@ -454,6 +959,7 @@ function sgraph()
         if (ind == INDEX_OPEN)
             bShowCandlestick = sg_main.m_bShowCandleStick;
         let dataScale = 1.0;
+
         if (ind == INDEX_ORDER)
             dataScale = sg_main.m_OrderScale;
 
@@ -465,15 +971,15 @@ function sgraph()
             {
                 let j = i*NDATA;
                 ix1 = getInterpolatedValueInt(i, m_imWidth, m_Start, m_Stop);
-                let open  = m_data[j + INDEX_OPEN];
+                let openp  = m_data[j + INDEX_OPEN];
                 let high  = m_data[j + INDEX_HIGH];
                 let low   = m_data[j + INDEX_LOW];
-                let close = m_data[j + INDEX_CLOSE];
-                open = ((open - dMin) * dScale);
+                let closep = m_data[j + INDEX_CLOSE];
+                openp = ((openp - dMin) * dScale);
                 high = ((high - dMin) * dScale);
                 low = ((low - dMin) * dScale);
-                close = ((close - dMin) * dScale);
-                drawCandlestick(ix1, iww, open, high, low, close);
+                closep = ((closep - dMin) * dScale);
+                drawCandlestick(ix1, iww, openp, high, low, closep);
             }
             if (!sg_main.m_bShowOpen)
                 return;
@@ -485,7 +991,7 @@ function sgraph()
             let j = i*NDATA;
             let v;
             if (ind == INDEX_ORDER)
-                v = m_data[j + ind] * dataScale * m_data[j + INDEX_HIGH];
+                v = m_order[i] * dataScale;
             else
                 v = (m_data[j + ind]) * dataScale;
             
@@ -573,7 +1079,7 @@ function sgraph()
         }
         sg_main.m_ctx.globalAlpha = 1.0;
     }
-    scaleImage = function (image_data_src, width, height, w, h, dStart, dStop) {
+    scaleColormapToImage = function (colormapData, width, height, w, h, dStart, dStop) {
         let imageCanvas_data = m_imageCanvas.data;
         let imgBytesPerPixel = 4;
         let iwInp = w * imgBytesPerPixel;
@@ -601,15 +1107,15 @@ function sgraph()
                 let cI1 = cIn + ii * imgBytesPerPixel;
                 let cI2 = cI1 + iwInp;
                 if (ii == w - 1) {
-                    imageCanvas_data[cOut] = (image_data_src[cI1] * (1.0 - yd) + image_data_src[cI2] * yd);
-                    imageCanvas_data[cOut + 1] = (image_data_src[cI1 + 1] * (1.0 - yd) + image_data_src[cI2 + 1] * yd);
-                    imageCanvas_data[cOut + 2] = (image_data_src[cI1 + 2] * (1.0 - yd) + image_data_src[cI2 + 2] * yd);
+                    imageCanvas_data[cOut] = (colormapData[cI1] * (1.0 - yd) + colormapData[cI2] * yd);
+                    imageCanvas_data[cOut + 1] = (colormapData[cI1 + 1] * (1.0 - yd) + colormapData[cI2 + 1] * yd);
+                    imageCanvas_data[cOut + 2] = (colormapData[cI1 + 2] * (1.0 - yd) + colormapData[cI2 + 2] * yd);
                     imageCanvas_data[cOut + 3] = 255;
                 }
                 else {
-                    imageCanvas_data[cOut] = ((image_data_src[cI1] * (1.0 - xd) + image_data_src[cI1 + imgBytesPerPixel] * xd) * (1 - yd) + (image_data_src[cI2] * (1.0 - xd) + image_data_src[cI2 + imgBytesPerPixel] * xd) * yd);
-                    imageCanvas_data[cOut + 1] = ((image_data_src[cI1 + 1] * (1.0 - xd) + image_data_src[cI1 + (imgBytesPerPixel + 1)] * xd) * (1 - yd) + (image_data_src[cI2 + 1] * (1.0 - xd) + image_data_src[cI2 + (imgBytesPerPixel + 1)] * xd) * yd);
-                    imageCanvas_data[cOut + 2] = ((image_data_src[cI1 + 2] * (1.0 - xd) + image_data_src[cI1 + (imgBytesPerPixel + 2)] * xd) * (1 - yd) + (image_data_src[cI2 + 2] * (1.0 - xd) + image_data_src[cI2 + (imgBytesPerPixel + 2)] * xd) * yd);
+                    imageCanvas_data[cOut] = ((colormapData[cI1] * (1.0 - xd) + colormapData[cI1 + imgBytesPerPixel] * xd) * (1 - yd) + (colormapData[cI2] * (1.0 - xd) + colormapData[cI2 + imgBytesPerPixel] * xd) * yd);
+                    imageCanvas_data[cOut + 1] = ((colormapData[cI1 + 1] * (1.0 - xd) + colormapData[cI1 + (imgBytesPerPixel + 1)] * xd) * (1 - yd) + (colormapData[cI2 + 1] * (1.0 - xd) + colormapData[cI2 + (imgBytesPerPixel + 1)] * xd) * yd);
+                    imageCanvas_data[cOut + 2] = ((colormapData[cI1 + 2] * (1.0 - xd) + colormapData[cI1 + (imgBytesPerPixel + 2)] * xd) * (1 - yd) + (colormapData[cI2 + 2] * (1.0 - xd) + colormapData[cI2 + (imgBytesPerPixel + 2)] * xd) * yd);
                     imageCanvas_data[cOut + 3] = 255;
                 }
                 cOut += imgBytesPerPixel;
@@ -642,13 +1148,9 @@ function sgraph()
         let volumeMinMax = getVolumeMinMax();
         dMinA = stockMinMax.dMin;
         dMaxA = stockMinMax.dMax;
-        let d = dMinA - dMinA;
-        if (d <= 0.0)
-            d = 1.0;
-        d = (ih - 1) / d;
         setCorrelationMatrix();
         sg_main.m_ctx.clearRect(0, 0, m_imWidth, m_imHeight);
-        scaleImage(m_image.data, iw, ih, m_image.width, m_image.height, m_Start, m_Stop);
+        scaleColormapToImage(m_colorMapData, iw, ih, m_colorMap.width, m_colorMap.height, m_Start, m_Stop);
 
         sg_main.m_ctx.putImageData(m_imageCanvas, 0, 0);
 
@@ -656,12 +1158,14 @@ function sgraph()
    
         highlightCorrIntervals(nCorr);
         
-        getProfit();
+        let vOrderScale = sg_main.m_OrderScale;
+        let vMaxLost = sg_main.m_MaxLost;
+
+        getProfit(vOrderScale, vMaxLost);
 
         let dd = m_dMax - m_dMin;
         let dMin = m_dMin - dd * 0.5;
         let dMax = m_dMax + dd * 0.5;
-        drawGrpah("Average",     INDEX_AVERAGE,     200, 200, 200, dMinA,  dMaxA,    sg_main.m_bShowAverage);
         drawGrpah("Volume",      INDEX_VOLUME,      200, 200, 200, volumeMinMax.dMin,  volumeMinMax.dMax,    sg_main.m_bShowVolume);
         drawGrpah("Order",       INDEX_ORDER,       127, 127, 255, dMin,   dMax,     sg_main.m_bShowOrder);
         drawGrpah("Profit",      INDEX_PROFIT,      255, 255, 255, m_dMinPr, m_dMaxPr,   sg_main.m_bShowProfit);
@@ -670,23 +1174,9 @@ function sgraph()
 
         return 1;
     }
-    calculateOrderDelta = function ()
-    {
-        let dOrderScale = sg_main.m_OrderScale;
-        for (let i = 0, indData = 0, outdData = 0; i < m_nData; i++, indData += NDATA, outdData += NDATA_FP)
-        {
-            let openRaw = m_data[indData + INDEX_OPEN];
-            let order = m_data[indData + INDEX_ORDER] * openRaw;
-            let delta = order * dOrderScale;
-            m_dataFP[outdData + INDEX_DELTA_FP] = delta;
-        }
-    }
-    calculateMaxLost = function()
-    {
-        let dMaxLostScale = sg_main.m_MaxLost * 0.01;
-        for (let i = 0, indData = 0, outdData = 0; i < m_nData; i++, indData += NDATA, outdData += NDATA_FP)
-        {
-            m_dataFP[outdData + INDEX_MAX_LOST_FP]  = m_data[indData + INDEX_OPEN] * dMaxLostScale;
+    calculateMaxLost = function () {
+        for (let i = 0, indData = 0, outdData = 0; i < m_nData; i++, indData += NDATA, outdData += NDATA_FP) {
+            m_dataFP[outdData + INDEX_MAX_LOST_FP] = m_data[indData + INDEX_OPEN] * 0.01;
         }
     }
     getAdjustedBySpreadOHLC = function()
@@ -694,129 +1184,68 @@ function sgraph()
         let spread = sg_main.m_Spread;
         for (let i = 0, indData = 0, outdData = 0; i < m_nData; i++, indData += NDATA, outdData += NDATA_FP)
         {
-            let open = m_data[indData + INDEX_OPEN];
+            let openp = m_data[indData + INDEX_OPEN];
             let high = m_data[indData + INDEX_HIGH];
             let low = m_data[indData + INDEX_LOW];
-            let close = m_data[indData + INDEX_CLOSE];
-            let openSpread  = open  - spread;
+            let closep = m_data[indData + INDEX_CLOSE];
+            let openSpread  = openp  - spread;
             let highSpread  = high  - spread;
             let lowSpread   = low   - spread;
-            let closeSpread = close - spread;
-            m_dataFP[outdData + INDEX_OPEN_FP]         = open;
-            m_dataFP[outdData + INDEX_HIGH_FP]         = high;
-            m_dataFP[outdData + INDEX_LOW_FP]          = low;
-            m_dataFP[outdData + INDEX_CLOSE_FP]        = close;
+            let closeSpread = closep - spread;
+            m_dataFP[outdData + INDEX_OPEN_FP]         = openp;
+            m_dataFP[outdData + INDEX_CLOSE_FP]        = closep;
             m_dataFP[outdData + INDEX_OPEN_SPREAD_FP]  = openSpread;
             m_dataFP[outdData + INDEX_HIGH_SPREAD_FP]  = highSpread;
             m_dataFP[outdData + INDEX_LOW_SPREAD_FP]   = lowSpread;
             m_dataFP[outdData + INDEX_CLOSE_SPREAD_FP] = closeSpread;
         }
     }
-    calculateArraysForCorrelation = function()
+    getArraysForProfitCalc = function()
     {
+        if (Math.abs(sg_main.m_Spread - m_spreadUsed) > 0.00001) {
+            m_spreadUsed = sg_main.m_Spread;
         getAdjustedBySpreadOHLC();
         calculateMaxLost();
+            m_dataFPGPU = null;
+        }
     }
     deleteCorrArrays = function()
     {
-        m_Corr.length = null;
-        m_dataCorr.length = null;
-    }
-    getCorrelationMatrix = function()
-    {
-        if(m_dataCorr.length == 0)
-        {
-            let length = m_nData * N_C;
-            let nCorr = sg_main.m_CorrLength * 2;
-            if (nCorr < 2)
-                nCorr = 2;
-            let s0 = 0.0;
-            let s1 = 0.0;
-            let indx = NDATA;
-            let x;
-            // Calculate Sum(X), and Sum(X*X)
-            for (let i = 1, j = N_C; i < m_nData; i++, j += N_C, indx += NDATA)
-            {
-                x = m_data[indx + INDEX_HIGH] - m_data[indx + INDEX_AVERAGE];
-                s0 += x;
-                m_dataCorr[j] = s0;
-                s1 += x*x;
-                m_dataCorr[j+1] = s1;
-            }
-
-            m_minCorr = 1e+17;
-            m_maxCorr = -1e+17;
-            for (let j = 0; j < sg_main.MATRIX_Y; j++)
-            {
-                calculateCorrelation(j, nCorr);
-            }
-            if (Math.abs(m_minCorr-m_maxCorr) < 0.0001)
-            {
-                m_minCorr = -1.0;
-                m_maxCorr = 1.0;
-            }
-        }
-    }
-    
-    getAverage = function()
-    {
-        let dAve = 0;
-        let nCorrAve = sg_main.m_AverageLength * 2 + 1;
-    
-        if (nCorrAve <= 0)
-        {
-            for (let i = 0, ii = 0; i < m_nData; i++, ii += NDATA)
-                m_data[ii + INDEX_AVERAGE]  = 0.0;
-        }
-        else
-        {
-            dAve = m_data[INDEX_OPEN];
-            let d3 = (nCorrAve+1.0) / (sg_main.m_AverageLengthMax * 2.0 + 2.0);
-            d3 = 1.0 - d3;
-            for (let i = 0, ind = 0; i < m_nData; i++, ind += NDATA)
-            {
-                let v = m_data[ind + INDEX_OPEN];
-                let diff = Math.abs(v-dAve);
-                if (dAve > 0.0)
-                    diff = diff * d3 / dAve;
-                dAve = diff < 1.0 ? dAve * (1.0 - diff) + v * diff : v;
-                m_data[ind + INDEX_AVERAGE] = dAve;
-            }
-        }
+        m_bCalcOrder = true;
     }
     allocateImage = function(nx, ny)
     {
-        if (m_image == null || m_corrWidth != nx || m_corrHeight != ny) {
+        if (m_colorMap == null || m_corrWidth != nx || m_corrHeight != ny) {
             m_corrWidth = nx;
             m_corrHeight = ny;
             return sg_main.m_ctx.getImageData(0, 0, nx, ny);
         }
-        return m_image;
+        return m_colorMap;
+    }
+    calcColormapAndOrders = function (nCorr) {
+        for (let i = 1; i < m_nData; i++) {
+            calcOneOrderAndColormapColumn(m_nData - i, nCorr);
+        }
+        // Set first value
+        m_order[0] = m_order[1];
+        m_data[INDEX_MAX_CORR] = m_data[NDATA + INDEX_MAX_CORR];
+        m_data[INDEX_MAX_CORR_DT] = m_data[NDATA + INDEX_MAX_CORR_DT];
     }
     setCorrelationMatrix = function()
-    {
-        m_image = allocateImage(m_nData, sg_main.MATRIX_Y);
-        if (m_Corr.length == 0)
+    { 
+        if (m_bCalcOrder || m_corrLengthUsed != sg_main.m_CorrLength)
         {
             let nCorr = sg_main.m_CorrLength * 2;
             if (nCorr < 2)
                 nCorr = 2;
 
-            getAverage();
+        m_colorMap = allocateImage(m_nData, sg_main.MATRIX_Y);
+        m_colorMapData = m_colorMap.data;
 
-            getCorrelationMatrix();
+            getArraysForProfitCalc();
+            getCorrelationMatrix(nCorr);
 
-            m_prevMaxCorPos = -1;
-
-            for (let i = 1; i < m_nData; i++)
-            {
-                calcCorrelationColormapColumn(m_nData - i, nCorr);
-            }
-            m_data[INDEX_ORDER] = m_data[NDATA + INDEX_ORDER];
-            m_data[INDEX_ORDER + 1] = m_data[NDATA + INDEX_ORDER + 1];
-            m_data[INDEX_ORDER + 2] = m_data[NDATA + INDEX_ORDER + 2];
-
-            calculateOrderDelta();
+            calcColormapAndOrders(nCorr);
         }
     }
     getOrder = function (corr, i0, nCorr, indyCorr)
@@ -852,126 +1281,99 @@ function sgraph()
         }
         return dOrder;
     }
-    calcCorrelationColormapColumn = function (i0, nCorr, dInitialCorrPos)
-    {
+    function setTo0colormap(i0) {
+        // Set column of colormapData to 0
         let nbpl = 4;
-        let ih = m_image.height;
-        let lw = m_image.width*nbpl;
-        let index = i0 * NDATA;
-        m_data[index + INDEX_ORDER] = 0.0;
-        m_data[index + INDEX_MAX_CORR] = 0.0;
-        m_data[index + INDEX_MAX_CORR_DT] = 0.0;
-
-        let dCorrMax = -999999.0;
-        let iCorrMax = -1;
-        let iXShift = 0;
+        let ih = m_colorMap.height;
+        let lw = m_colorMap.width * nbpl;
         let c = i0 * nbpl;
-        if (i0 <= nCorr - 1 - iXShift || i0 >= m_nData - iXShift) {
-            for (let k = 0, mCorrInd = i0; k < ih; k++, mCorrInd += m_nData, c += lw) {
-                m_image.data[c] = 0;
-                m_image.data[c + 1] = 0;
-                m_image.data[c + 2] = 0;
-            }
-            return 0.0;
+        for (let k = 0; k < ih; k++, c += lw) {
+            m_colorMapData[c] = 0;
+            m_colorMapData[c + 1] = 0;
+            m_colorMapData[c + 2] = 0;
         }
-        let dCorrScale = (m_maxCorr - m_minCorr) > 0.0 ? 1.0 / (m_maxCorr - m_minCorr) : 0.0;
-        let i1Start = i0 - nCorr;
-        let i1Min = nCorr - iXShift;
-        let i1Max = m_nData - iXShift - 1;
+    }
+    function calcColormapColumn(i0, nCorr, i1Min, i1Max, dCorrScale) {
+        // Set column of colormapData
+        let nbpl = 4;
+        let ih = m_colorMap.height;
+        let lw = m_colorMap.width*nbpl;
         let ig = HIGHLIGHT;
-        let kCorrMax = -1;
-        
-        let sOrder = 0.0;
-        let sCorr = 0.0;
-        let dMaxCorr = m_maxCorr - m_minCorr;
-        if (dMaxCorr > 0.0001)
-            dMaxCorr = 1.0 / dMaxCorr;
-        let yCorr = 0.0;
-        let dOrder = 0.0;
-        for (let k = 0, iCorrInd = i0; k < ih; k++, iCorrInd += m_nData) {
-            let ind = i1Start - k;
-            if (ind >= i1Min && ind <= i1Max) {
-
-                let corr = m_Corr[iCorrInd - 1];
-                /*
-                let indn = ind * NDATA;
-                indn += NDATA;
-                dOrder = m_data[indn + INDEX_HIGH] - m_data[indn + INDEX_OPEN];
-                dOrder -= sg_main.m_Spread;
-                if (dOrder > 0.0) {
-                    dOrder = (m_data[indn + INDEX_OPEN] > 0.0) ? 1.0 / m_data[indn + INDEX_OPEN] : 0.0;
-                    if (m_maxCorr > m_minCorr) {
-                        let dCorr = (corr - m_minCorr) * dMaxCorr;
-                        //dCorr *= dCorr;
-                        dOrder = dOrder * dCorr * dCorr;
-                        sOrder += dOrder;
-                        sCorr += dCorr;
-                        yCorr += k * dCorr;
-                    }
-                }
-                else
-                    dOrder = 0.0;
-                */
-                
-                if (corr > dCorrMax) {
-                    dCorrMax = corr;
-                    kCorrMax = k;
-                }
-                
-            }
-        }
-        if (kCorrMax < 0) {
-            for (let k = 0, mCorrInd = i0; k < ih; k++, mCorrInd += m_nData, c += lw) {
-                m_image.data[c] = 0;
-                m_image.data[c + 1] = 0;
-                m_image.data[c + 2] = 0;
-            }
-            return 0.0;
-        }
-
-        if (m_prevMaxCorrPos < 0 && kCorrMax >= 0) {
-            m_prevMaxCorrPos = kCorrMax;
-            m_prevMaxCorr = dCorrMax;
-        }
-
-        for (let k = 0, mCorrInd = i0; k < ih; k++, mCorrInd += m_nData, c += lw)
-        {
+        let c = i0 * nbpl;
+        let i1Start = i0 - nCorr;
+        for (let k = 0, mCorrInd = i0; k < ih; k++, mCorrInd += m_nData, c += lw) {
             let i1 = i1Start - k;
-            if (i1 >= i1Min && i1 <= i1Max)
-            {
+            if (i1 >= i1Min && i1 <= i1Max) {
                 let ir;
                 let ib;
                 let corrToDraw = m_Corr[mCorrInd - 1];
                 let ccorr = (corrToDraw - m_minCorr) * dCorrScale;
-                if (ccorr > 0.5)
-                {
+                if (ccorr > 0.5) {
                     let rr = (ccorr - 0.5) * 510 + HIGHLIGHT;
                     ir = rr > 255.0 ? 255 : Math.floor(rr);
                     ib = 0;
                 }
-                else
-                {
+                else {
                     let bb = (0.5 - ccorr) * 510 + HIGHLIGHT;
                     ib = (bb > 255.0) ? 255 : Math.floor(bb);
                     ir = 0;
                 }
-                m_image.data[c] = ir;
-                m_image.data[c+1] = ig;
-                m_image.data[c+2] = ib;
+                m_colorMapData[c] = ir;
+                m_colorMapData[c + 1] = ig;
+                m_colorMapData[c + 2] = ib;
             }
-            else
-            {
-                m_image.data[c] = 0;
-                m_image.data[c + 1] = 0;
-                m_image.data[c + 2] = 0;
+            else {
+                m_colorMapData[c] = 0;
+                m_colorMapData[c + 1] = 0;
+                m_colorMapData[c + 2] = 0;
             }
         }
+    }
+    calcOneOrderAndColormapColumn = function (i0, nCorr)
+    {
+        let index = i0 * NDATA;
+        m_order[i0] = 0.0;
+        m_data[index + INDEX_MAX_CORR] = 0.0;
+        m_data[index + INDEX_MAX_CORR_DT] = 0.0;
+
+        let iXShift = 0;
+        if (i0 <= nCorr - 1 - iXShift || i0 >= m_nData - iXShift) {
+            setTo0colormap(i0, nCorr);
+            return 0.0;
+        }
+        let dCorrMax = -999999.0;
+        let iCorrMax = -1;
+        let dCorrScale = (m_maxCorr - m_minCorr) > 0.0 ? 1.0 / (m_maxCorr - m_minCorr) : 0.0;
+        let i1Start = i0 - nCorr;
+        let i1Min = nCorr - iXShift;
+        let i1Max = m_nData - iXShift - 1;
+        let kCorrMax = -1;
+        
+        let sOrder = 0.0;
+        let sCorr = 0.0;
+        let yCorr = 0.0;
+        let dOrder = 0.0;
+        let ih = m_colorMap.height;
+        for (let k = 0, iCorrInd = i0; k < ih; k++, iCorrInd += m_nData) {
+            let ind = i1Start - k;
+            if (ind >= i1Min && ind <= i1Max) {
+                let corr = m_Corr[iCorrInd - 1];
+                if (corr > dCorrMax) {
+                    dCorrMax = corr;
+                    kCorrMax = k;
+                }
+            }
+        }
+        if (kCorrMax < 0) {
+            setTo0colormap(i0);
+            return 0.0;
+        }
+        dCorrMax = (dCorrMax - m_minCorr) * dCorrScale;
+        calcColormapColumn(i0, nCorr, i1Min, i1Max, dCorrScale);
         dOrder = getOrder(dCorrMax, i0, nCorr, kCorrMax);
-        m_data[index + INDEX_ORDER] = dOrder;
+        m_order[i0] = dOrder * m_data[index + INDEX_OPEN];
         m_data[index + INDEX_MAX_CORR] = dCorrMax;
         m_data[index + INDEX_MAX_CORR_DT] = kCorrMax;
-
-        return dOrder;
     }
     histDataToTable = function (str) {
         if (localStorage != undefined) {
@@ -1063,7 +1465,7 @@ function sgraph()
                     let v = m_data[m_Index0 * NDATA + i];
                     let dataScale = 1.0;
                     if (i == INDEX_ORDER) {
-                        v = v * sg_main.m_OrderScale * m_data[m_Index0 * NDATA + INDEX_HIGH];
+                        v = v * sg_main.m_OrderScale;
                     }
                     let x = getInterpolatedValue(m_Index0, m_imWidth, m_Start, m_Stop);
                     let y = m_imHeight - (v - m_gMin[i]) * m_imHeight / (m_gMax[i] - m_gMin[i]) - 1;
@@ -1110,11 +1512,14 @@ function sgraph()
             m_Start = 0;
             m_Stop = m_nData;
         }
-        calculateArraysForCorrelation();
         myDrawImage();
     }
     dataLoaded = function () {
         dt4 = new Date();
+        m_bCalcOrder = true;
+        m_spreadUsed = -999999.0; // Recalculate internal arrays by getArraysForProfitCalc
+        m_corrLengthUsed = -999999.0; // Recalculate correlation matrix by getCorrelationMatrix
+        m_dataGPU = null; // resend loaded data to GPU (if 'Use GPU' selected)
         processLoadedData();
     }
     setup = function(x, y)
@@ -1129,31 +1534,27 @@ function sgraph()
         m_imageCanvas = sg_main.m_ctx.getImageData(0, 0, sg_main.m_cnv.width, sg_main.m_cnv.height);
         dt2 = new Date();
     }
+    setupOptimization = function () {
+        sg_main.m_OrderScale = m_ranges[0];
+        sg_main.m_MaxLost = m_ranges[3];
+        sg_main.m_CorrLength = m_ranges[7]; // go from max to min
+        m_bCalcOrder = true;
+        setCorrelationMatrix();
+    }
     set1stOptimizeRanges = function()
     {
         sg_main.getOptimizeRanges();
     }
-    run1stOptimization = function () {
-        sg_main.m_OrderScale = m_ranges[0];
-        sg_main.m_MaxLost = m_ranges[3];
-        sg_main.m_AverageLength = m_ranges[6];
-        sg_main.m_CorrLength = m_ranges[9];
-        sg_main.m_CorrLength = m_ranges[10]; // go from max to min
-        deleteCorrArrays();
-        calculateArraysForCorrelation();
-        setCorrelationMatrix();
-    }
     set1stOptimizationValues = function () {
-        m_optimum_PredScale = m_ranges[0];
+        m_optimum_OrderScale = m_ranges[0];
         m_optimum_MaxLost = m_ranges[3];
-        m_optimum_ave = m_ranges[6];
-        m_optimum_ncorr = m_ranges[10]; // go from max to min
+        m_optimum_ncorr = m_ranges[7]; // go from max to min
     }
     set2ndOptimization = function () {
-        let optValues = [sg_main.m_OrderScale, sg_main.m_MaxLost, sg_main.m_AverageLength, sg_main.m_CorrLength];
-        let iStep = [4, 4, 4, 2];
-        let nSteps = 10;
-        for (let i = 0; i < 4; i++)
+        let optValues = [sg_main.m_OrderScale, sg_main.m_MaxLost, sg_main.m_CorrLength];
+        //let nSteps = 10;
+        let nSteps = 5;
+        for (let i = 0; i < optValues.length; i++)
         {
             let rmin = optValues[i] - m_ranges[i * 3 + 2] * nSteps;
             if (rmin < m_ranges[i * 3])
@@ -1165,20 +1566,27 @@ function sgraph()
             m_ranges[i * 3 + 1] = rmax;
         }
 
-        run1stOptimization();
+        if (sg_main.m_bUseGPU)
+            setupGPU(2);
+
+        setupOptimization();
     }
     set1stOptimization = function () {
+        m_loop1Time = 0;
+        m_loop1Count = 0;
         m_optimumProfit = -10000000000.0;
 
         set1stOptimizeRanges();
         set1stOptimizationValues();
 
-        run1stOptimization();
+        if (sg_main.m_bUseGPU)
+            setupGPU(1);
+
+        setupOptimization();
     }
     setCurrentOptimizedValues = function () {
-        sg_main.m_OrderScale = m_optimum_PredScale;
+        sg_main.m_OrderScale = m_optimum_OrderScale;
         sg_main.m_MaxLost = m_optimum_MaxLost;
-        sg_main.m_AverageLength = m_optimum_ave;
         sg_main.m_CorrLength = m_optimum_ncorr;
     }
     stopOptimize = function () {
@@ -1187,13 +1595,14 @@ function sgraph()
             onOptimizeEnd();
     }
     optimizeParams = function() {
-        if (m_optimizeTimeout)
+        if (m_optimizeTimeout) {
             clearTimeout(m_optimizeTimeout);
+            m_optimizeTimeout = 0;
+        }
         switch (m_optimize)
         {
             case eStart1stOptimizationLoop:
                 set1stOptimization();
-                calculateArraysForCorrelation();
                 m_optimize++;
                 break;
             case eRun1stOptimizationLoop:
@@ -1205,7 +1614,6 @@ function sgraph()
                 break;
             case eStart2ndOptimizationLoop:
                 set2ndOptimization();
-                calculateArraysForCorrelation();
                 m_optimize++;
                 break;
             case eRun2ndOptimizationLoop:
@@ -1222,92 +1630,43 @@ function sgraph()
         if (m_optimize != eNoOptimization)
         {
             sg_main.updateSlidersValues();
-            m_optimizeTimeout = window.setTimeout(optimizeParams, 20);
+            let tm = 20;
+            if (false || !!document.documentMode)
+                tm = 100; // for IE delay need to be atleast 70 ms for sliders update 
+            m_optimizeTimeout = window.setTimeout(optimizeParams, tm);
         }
     }
-    updateOptimums = function()
-    {
-        let s = getProfit();
-        if (m_optimumProfit < s)
-        {
-            m_optimumProfit = s;
-            m_optimum_PredScale = sg_main.m_OrderScale;
-            m_optimum_MaxLost = sg_main.m_MaxLost;
-            m_optimum_ave = sg_main.m_AverageLength;
-            m_optimum_ncorr = sg_main.m_CorrLength;
-            processLoadedData();
-        }
+    updateOptimums = function (iStep) {
+        let N = Math.floor((m_ranges[1] - m_ranges[0]) / (iStep * m_ranges[2]) + 1.1);
+        let M = Math.floor((m_ranges[4] - m_ranges[3]) / (iStep * m_ranges[5]) + 1.1);
+        getProfitOpt(N, iStep, M, iStep);
     }
-    optomizeLoop = function(iopt)
-    {
+    optomizeLoop = function (iopt) {
         let iRanges = m_ranges;
         let iTick = new Date();
         let iStepCorr = (m_optimize == eRun2ndOptimizationLoop) ? 1 : 2;
-        let iStep = (m_optimize == eRun2ndOptimizationLoop) ? 1 : 4;
-        while(m_optimize == iopt)
-        {
-            updateOptimums();
-            if (sg_main.m_OrderScale >= iRanges[1])
+        let iStep = (m_optimize == eRun2ndOptimizationLoop) ? 1 : 2;
+        while (m_optimize == iopt) {
+            updateOptimums(iStep);
+            if (sg_main.m_CorrLength == 2) // go from max to min
             {
-                sg_main.m_OrderScale = iRanges[1];
-                if (sg_main.m_OrderScale != iRanges[0]) // skip if iRanges[0] == iRanges[1]
-                {
-                    sg_main.m_OrderScale = iRanges[0];
-                    calculateOrderDelta();
-                }
-                if (sg_main.m_MaxLost >= iRanges[4])
-                {
-                    sg_main.m_MaxLost = iRanges[4];
-                    if (sg_main.m_MaxLost != iRanges[3]) // skip if iRanges[3] == iRanges[4]
-                    {
-                        sg_main.m_MaxLost = iRanges[3];
-                        calculateOrderDelta();
-                    }
-                    if (sg_main.m_AverageLength >= iRanges[7])
-                    {
-                        sg_main.m_AverageLength = iRanges[7];
-                        if (sg_main.m_AverageLength != iRanges[6])  // skip if iRanges[6] == iRanges[7]
-                        {
-                            sg_main.m_AverageLength = iRanges[6];
-                            deleteCorrArrays();
-                            setCorrelationMatrix();
-                        }
-                        if (sg_main.m_CorrLength <= iRanges[9]) // go from max to min
-                        {
-                            sg_main.m_CorrLength = iRanges[9]; // go from max to min
-                            m_optimize++;
-                            break;
-                        }
-                        else
-                        {
-                            sg_main.m_CorrLength -= iStepCorr * iRanges[11]; // go from max to min
-                            if (sg_main.m_CorrLength <= iRanges[9]) // go from max to min
-                                sg_main.m_CorrLength = iRanges[9]; // go from max to min
-                            deleteCorrArrays();
-                            setCorrelationMatrix();
-                        }
-                    }
-                    else
-                    {
-                        sg_main.m_AverageLength += iStep * iRanges[8];
-                        if (sg_main.m_AverageLength >= iRanges[7])
-                            sg_main.m_AverageLength = iRanges[7];
-                        deleteCorrArrays();
-                        setCorrelationMatrix();
-                    }
-                }
-                else
-                {
-                    sg_main.m_MaxLost += iStep * iRanges[5];
-                    if (sg_main.m_MaxLost >= iRanges[4])
-                        sg_main.m_MaxLost = iRanges[4];
-                    calculateMaxLost();
-                }
+                m_optimize++;
+                break;
             }
-            else
+            if (sg_main.m_CorrLength <= iRanges[6]) // go from max to min
             {
-                sg_main.m_OrderScale += iStep * iRanges[2];
-                calculateOrderDelta();
+                sg_main.m_CorrLength = iRanges[6]; // go from max to min
+                m_optimize++;
+                break;
+            }
+            else {
+                sg_main.m_CorrLength -= iStepCorr * iRanges[8]; // go from max to min
+                if (sg_main.m_CorrLength <= iRanges[6]) // go from max to min
+                    sg_main.m_CorrLength = iRanges[6]; // go from max to min
+                if (sg_main.m_CorrLength < 2)
+                    sg_main.m_CorrLength = 2;
+                m_bCalcOrder = true;
+                setCorrelationMatrix();
             }
             let dt = new Date();
             let iDt = dt.getTime() - iTick.getTime();
@@ -1336,9 +1695,14 @@ function sgraph()
             "Setup: " + (dt2.getTime() - dt1.getTime()).toString() + "[ms], " +
             "Data load: " + (dt4.getTime() - dt3.getTime()).toString() + "[ms], " +
             "Background setup: " + (dt6.getTime() - dt5.getTime()).toString() + "[ms], " +
-            "Correlation map: " + (dt7.getTime() - dt6.getTime()).toString() + "[ms], " +
+            "total 'OrderScale x MaxLost' loop=" + parseFloat(m_loop1Time/1000).toFixed(3) + "[sec], Average=" + parseFloat(m_loop1Time / (m_loop1Count+0.0001)).toFixed(3) + "[ms], " +
+            "Colormap: " + (dt7.getTime() - dt6.getTime()).toString() + "[ms], " +
+            "Corr Matrix: " + (dt10.getTime() - dt9.getTime()).toString() + "[ms], " +
             "Draw to screen: " + (dt8.getTime() - dt7.getTime()).toString() + "[ms]<br>" +
             "Draw total: " + (dt8.getTime() - dt5.getTime()).toString() + "[ms] ";
+        
+        //m_loop1Time = 0;
+        //m_loop1Count = 0;
         return strPerfomance;
     }
     return {

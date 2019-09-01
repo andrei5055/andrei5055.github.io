@@ -1,12 +1,14 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="user-scalable=no, width=device-width"/>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <link rel="stylesheet"
-              type="text/css"
-              href="sgraph.css" />
-        <title>Technical Analysis Price Correlation</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1"/>
+        <meta name="application-name" content="SGraph"/>
+        <meta name="author" content="Leonid M Tertitski"/>
+        <meta name="description" content="Stock market historical price autocorrelation calculation and display as colormap. Uses pure Javascript, CSS and Convex 2D">
+        <link rel="stylesheet" type="text/css" href="sgraph.css" />
+        <title>Historical Price Autocorrelation Colormap with optional GPU acceleration</title>
+        <script src="gpu/dist/gpu-browser.min.js"></script>
         <script src="sgraph.js"></script>
         <script src="sgraphgui.js"></script>
         <script src="sgraphmain.js"></script>
@@ -24,7 +26,7 @@
     <div id="sg_disable_all" onclick="sg_main.stopOptimize(event)"></div>
     <div class="sg_topbuttons" id="sg_buttons">
         <input style="position:absolute; z-index:-1; opacity:0;pointer-events:none" type="file" accept=".csv" id="param_data_file" onchange="sg_main.handleFile(this.files)">
-        <button class="button button_top" id=""sg_filename_button" onclick="document.querySelector('#param_data_file').click()">
+        <button class="button button_top" id="sg_filename_button" onclick="document.querySelector('#param_data_file').click()">
             <xml version="1.0" encoding="UTF-8" standalone="no"></xml>
             <svg width="35" height="15" version="1.1" viewbox="12 12 40 40" style="position:relative; top:1px; left: 0px;">
                 <rect style=" opacity:0.2" width="50" height="32" x="7" y="24" rx="2.5" ry="2.5"></rect>
@@ -71,11 +73,6 @@
                     <span class="checkmark"></span>
                 </label>
                 <label class="checkbox_con">
-                    Average
-                    <input type="checkbox" id="param_cb25" value="m_bShowAverage" onclick="sg_main.showSGraph()">
-                    <span class="checkmark"></span>
-                </label>
-                <label class="checkbox_con">
                     Volume
                     <input type="checkbox" id="param_cb26" value="m_bShowVolume" onclick="sg_main.showSGraph()">
                     <span class="checkmark"></span>
@@ -91,7 +88,7 @@
                     <span class="checkmark"></span>
                 </label>
                 <label class="checkbox_con">
-                    Maximum Correlation  value
+                    Maximum Correlation value
                     <input type="checkbox" id="param_cb29" value="m_bShowCorr" onclick="sg_main.showSGraph()">
                     <span class="checkmark"></span>
                 </label>
@@ -111,6 +108,11 @@
                 <label class="checkbox_con">
                     Show perfomance
                     <input type="checkbox" id="param_cb34" onclick="sg_main.showSGraph()">
+                    <span class="checkmark"></span>
+                </label>
+                <label class="checkbox_con">
+                    Use GPU for Optimization
+                    <input type="checkbox" id="param_cb35" onclick="sg_main.showSGraph()">
                     <span class="checkmark"></span>
                 </label>
             </fieldset>
@@ -141,28 +143,22 @@
         <div class="sg_paramstable">
             <fieldset style="border-radius: 8px;">
                 <legend>Optimization parameters:</legend>
-                <label id="sg_param_label1" for="param_sl1">Correlation length:</label>
-                <label id="param_sla1">50</label>
+                <label id="sg_param_label1" for="param_slider1">Correlation length:</label>
+                <label id="sg_param_slabel1">50</label>
                 <br>
-                <input type="range" min="1" max="100" value="50" step="1" class="slider" id="param_sl1" onchange="sg_main.paramSliderChange(2, 1)" oninput="sg_main.paramSliderChange(2, 1)">
-                <br>
-                <br>
-                <label id="sg_param_label2" for="param_sl2">Order scale:</label>
-                <label id="param_sla2">0.01</label>
-                <br>
-                <input type="range" min="0" max="4" value="1" step="0.01" class="slider" id="param_sl2" onchange="sg_main.paramSliderChange(2, 2)" oninput="sg_main.paramSliderChange(2, 2)">
+                <input type="range" min="1" max="100" value="50" step="1" class="slider" id="param_slider1" onchange="sg_main.paramSliderChange(2, 1)" oninput="sg_main.paramSliderChange(2, 1)">
                 <br>
                 <br>
-                <label id="sg_param_label4" for="param_sl4">Maximum lost (% of Open):</label>
-                <label id="param_sla4">0.4</label>
+                <label id="sg_param_label2" for="param_slider2">Order scale:</label>
+                <label id="sg_param_slabel2">0.01</label>
                 <br>
-                <input type="range" min="0" max="2.5" value="0.4" step="0.1" class="slider" id="param_sl4" onchange="sg_main.paramSliderChange(2, 4)" oninput="sg_main.paramSliderChange(2, 4)">
+                <input type="range" min="0" max="4" value="1" step="0.01" class="slider" id="param_slider2" onchange="sg_main.paramSliderChange(2, 2)" oninput="sg_main.paramSliderChange(2, 2)">
                 <br>
                 <br>
-                <label id="sg_param_label3" for="param_sl3">Average length:</label>
-                <label id="param_sla3">40</label>
+                <label id="sg_param_label3" for="param_slider3">Maximum lost (% of Open):</label>
+                <label id="sg_param_slabel3">0.4</label>
                 <br>
-                <input type="range" min="0" max="100" value="40" step="1" class="slider" id="param_sl3" onchange="sg_main.paramSliderChange(2, 3)" oninput="sg_main.paramSliderChange(2, 3)">
+                <input type="range" min="0" max="2.5" value="0.4" step="0.1" class="slider" id="param_slider3" onchange="sg_main.paramSliderChange(2, 3)" oninput="sg_main.paramSliderChange(2, 3)">
                 <br>
                 <br>
                 <button id="sg_optimize" class="button button_params" onclick="sg_main.onClickedOptimize()">Optimize</button>
@@ -170,16 +166,16 @@
             </fieldset>
             <fieldset style="border-radius: 8px;">
                 <legend>Calculation parameters:</legend>
-                <label id="sg_param_label5" for="param_sl5">Maximum days keep open:</label>
-                <label id="param_sla5">6</label>
+                <label id="sg_param_label4" for="param_slider4">Maximum days keep open:</label>
+                <label id="sg_param_slabel4">6</label>
                 <br>
-                <input type="range" min="0" max="100" value="6" step="1" class="slider" id="param_sl5" onchange="sg_main.paramSliderChange(2, 5)" oninput="sg_main.paramSliderChange(2, 5)">
+                <input type="range" min="0" max="100" value="6" step="1" class="slider" id="param_slider4" onchange="sg_main.paramSliderChange(2, 4)" oninput="sg_main.paramSliderChange(2, 4)">
                 <br>
                 <br>
-                <label id="sg_param_label6" for="param_sl6">Bid-ask spread($):</label>
-                <label id="param_sla6">0.01</label>
+                <label id="sg_param_label5" for="param_slider5">Bid-ask spread($):</label>
+                <label id="sg_param_slabel5">0.01</label>
                 <br>
-                <input type="range" min="0" max="1" value="0.01" step="0.01" class="slider" id="param_sl6" onchange="sg_main.paramSliderChange(2, 6)" oninput="sg_main.paramSliderChange(2, 6)">
+                <input type="range" min="0" max="1" value="0.01" step="0.01" class="slider" id="param_slider5" onchange="sg_main.paramSliderChange(2, 5)" oninput="sg_main.paramSliderChange(2, 5)">
                 <br>
             </fieldset>
         </div>
@@ -222,11 +218,9 @@
             <br>
             <fieldset style="border-radius: 8px;">
                 <legend>Archive Table (double-click on a row to select)</legend>
-                <textarea name="resultname" id="sg_paste_table" value="LatestResult" class="textarea button_params"
-                            spellcheck="false" onclick="sg_main.clickArhiveTable()" oncopy="sg_main.copyArhiveTable()"
-                            onpaste="sg_main.pasteArhiveTable()" oninput="sg_main.rejectArhiveInput()">
-                    Copy/Paste Table
-                </textarea>
+                <textarea name="sg_copypaste" id="sg_copypaste_area" value="Copy/Paste full Table" class="textarea button_params"
+                          spellcheck="false" onclick="sg_main.clickArhiveTable()" oncopy="sg_main.copyArhiveTable()"
+                          onpaste="sg_main.pasteArhiveTable()">Copy/Paste full Table</textarea>
                 <br>
                 <div id="sg_params_tbl" class="scrollData" style="width: 950px;">
                 </div>

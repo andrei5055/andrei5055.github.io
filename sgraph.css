@@ -6,7 +6,7 @@ body {
 #sg_disable_all
 {
     display: none; 
-    z-index:1001;
+    z-index:1000;
     position: absolute; 
     top: 0%; 
     left: 0%; 
@@ -22,7 +22,6 @@ body {
 .sg_paramshead {
 	border-radius: 8px;
     position: absolute;
-    z-index: 9;
     background-color: #f1f1f1;
     border: 1px solid #d3d3d3;
     overflow:hidden; /* something other than visible */
@@ -47,7 +46,6 @@ body {
 	position: static;
     padding: 10px;
     cursor: move;
-    z-index: 10;
     background-color: #2090Ff;
     color: #fff;
 }
@@ -61,7 +59,7 @@ body {
 
 .textarea {
     background-color: #2090Ff;
-	width:200px;
+	width:250px;
 	height:20px;
 	right: 20px;
 	resize: none;
@@ -366,5 +364,4 @@ html, body, div, a, i, button, select, option, optgroup, hr, br {
   user-select: none;
   cursor: default;
 }
-
  
